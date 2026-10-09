@@ -34,8 +34,20 @@ class SettingViewModel : ViewModel() {
     private val _backgroundImageUri = MutableStateFlow("")
     val backgroundImageUri = _backgroundImageUri.asStateFlow()
 
+    private val _courseReminderEnabled = MutableStateFlow(false)
+    val courseReminderEnabled = _courseReminderEnabled.asStateFlow()
+
+    private val _courseReminderLeadMinutes = MutableStateFlow(10)
+    val courseReminderLeadMinutes = _courseReminderLeadMinutes.asStateFlow()
+
 
     init {
+        viewModelScope.launch {
+            DataStoreRepository.getCourseReminderState().collect { state ->
+                _courseReminderEnabled.value = state.enabled
+                _courseReminderLeadMinutes.value = state.leadMinutes
+            }
+        }
         viewModelScope.launch {
             DataStoreRepository.getGradeAutoSyncOption().collect {
                 _autoSyncGradeEnable.value = it
@@ -90,6 +102,14 @@ class SettingViewModel : ViewModel() {
         viewModelScope.launch {
             DataStoreRepository.setGradeAutoSyncOption(enabled)
         }
+    }
+
+    fun setCourseReminderEnabled(enabled: Boolean) {
+        viewModelScope.launch { DataStoreRepository.setCourseReminderEnabled(enabled) }
+    }
+
+    fun setCourseReminderLeadMinutes(minutes: Int) {
+        viewModelScope.launch { DataStoreRepository.setCourseReminderLeadMinutes(minutes) }
     }
 
     fun setHomeworkAutoSyncOption(enabled: Boolean) {

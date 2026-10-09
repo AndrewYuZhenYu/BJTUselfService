@@ -4,11 +4,15 @@ import android.content.Context
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import team.bjtuss.bjtuselfservice.MainApplication.Companion.appContext
@@ -26,6 +30,11 @@ object DataStoreRepository {
     private val SYNC_SCHEDULE_KEY = booleanPreferencesKey("auto_sync_schedule")
     private val SYNC_EXAMS_KEY = booleanPreferencesKey("auto_sync_exams")
     private val CURRENT_WEEK_KEY = stringPreferencesKey("current_week")
+    private val CURRENT_WEEK_VERIFIED_AT_KEY = longPreferencesKey("current_week_verified_at")
+    private val COURSE_REMINDER_ENABLED_KEY = booleanPreferencesKey("course_reminder_enabled")
+    private val COURSE_REMINDER_LEAD_MINUTES_KEY = intPreferencesKey("course_reminder_lead_minutes")
+    private val SCHEDULED_COURSE_REMINDERS_KEY = stringSetPreferencesKey("scheduled_course_reminders")
+    private val DELIVERED_COURSE_REMINDERS_KEY = stringSetPreferencesKey("delivered_course_reminders")
     private val CHECK_UPDATE_KEY = booleanPreferencesKey("check_update")
     private val DYNAMIC_COLOR_KEY = booleanPreferencesKey("dynamic_color")
 
@@ -204,6 +213,71 @@ object DataStoreRepository {
     suspend fun setCurrentWeek(week: Int) {
         appContext.dataStore.edit { preferences ->
             preferences[CURRENT_WEEK_KEY] = week.toString()
+        }
+    }
+
+    data class CourseReminderState(
+        val enabled: Boolean,
+        val leadMinutes: Int,
+        val verifiedWeek: Int,
+        val verifiedAtMillis: Long,
+    )
+
+    fun getCourseReminderState(): Flow<CourseReminderState> = appContext.dataStore.data
+        .map { preferences ->
+            CourseReminderState(
+                enabled = preferences[COURSE_REMINDER_ENABLED_KEY] ?: false,
+                leadMinutes = (preferences[COURSE_REMINDER_LEAD_MINUTES_KEY] ?: 10)
+                    .takeIf { it in setOf(5, 10, 15, 30) } ?: 10,
+                verifiedWeek = preferences[CURRENT_WEEK_KEY]?.toIntOrNull() ?: 0,
+                verifiedAtMillis = preferences[CURRENT_WEEK_VERIFIED_AT_KEY] ?: 0L,
+            )
+        }.distinctUntilChanged()
+
+    suspend fun setVerifiedCurrentWeek(week: Int, verifiedAtMillis: Long) {
+        if (week <= 0) return
+        appContext.dataStore.edit { preferences ->
+            preferences[CURRENT_WEEK_KEY] = week.toString()
+            preferences[CURRENT_WEEK_VERIFIED_AT_KEY] = verifiedAtMillis
+        }
+    }
+
+    suspend fun invalidateVerifiedCurrentWeek() {
+        appContext.dataStore.edit { it.remove(CURRENT_WEEK_VERIFIED_AT_KEY) }
+    }
+
+    suspend fun setCourseReminderEnabled(enabled: Boolean) {
+        appContext.dataStore.edit { it[COURSE_REMINDER_ENABLED_KEY] = enabled }
+    }
+
+    suspend fun setCourseReminderLeadMinutes(minutes: Int) {
+        require(minutes in setOf(5, 10, 15, 30))
+        appContext.dataStore.edit { it[COURSE_REMINDER_LEAD_MINUTES_KEY] = minutes }
+    }
+
+    suspend fun getScheduledCourseReminders(): Set<String> =
+        appContext.dataStore.data.first()[SCHEDULED_COURSE_REMINDERS_KEY].orEmpty()
+
+    suspend fun setScheduledCourseReminders(keys: Set<String>) {
+        appContext.dataStore.edit { it[SCHEDULED_COURSE_REMINDERS_KEY] = keys }
+    }
+
+    suspend fun getDeliveredCourseReminders(): Set<String> =
+        appContext.dataStore.data.first()[DELIVERED_COURSE_REMINDERS_KEY].orEmpty()
+
+    suspend fun markCourseReminderDelivered(key: String) {
+        appContext.dataStore.edit { preferences ->
+            preferences[DELIVERED_COURSE_REMINDERS_KEY] =
+                preferences[DELIVERED_COURSE_REMINDERS_KEY].orEmpty() + key
+        }
+    }
+
+    suspend fun retainDeliveredCourseReminders(sinceDate: String) {
+        appContext.dataStore.edit { preferences ->
+            preferences[DELIVERED_COURSE_REMINDERS_KEY] =
+                preferences[DELIVERED_COURSE_REMINDERS_KEY].orEmpty().filterTo(mutableSetOf()) {
+                    it.substringBefore('|') >= sinceDate
+                }
         }
     }
 

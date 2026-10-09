@@ -56,6 +56,7 @@ import kotlinx.coroutines.future.await
 import kotlinx.coroutines.launch
 import team.bjtuss.bjtuselfservice.StudentAccountManager
 import team.bjtuss.bjtuselfservice.database.AppDatabase
+import team.bjtuss.bjtuselfservice.notification.CourseReminderScheduler
 import team.bjtuss.bjtuselfservice.repository.DataStoreRepository
 import team.bjtuss.bjtuselfservice.repository.SmartCurriculumPlatformRepository
 import team.bjtuss.bjtuselfservice.viewmodel.MainViewModel
@@ -231,6 +232,9 @@ object AuthenticatorManager {
         AuthenticatorManager.updateCredentials(Credentials("", ""))
         mainViewModel.clearChange()
         CoroutineScope(Dispatchers.IO).launch {
+            DataStoreRepository.setCourseReminderEnabled(false)
+            DataStoreRepository.invalidateVerifiedCurrentWeek()
+            CourseReminderScheduler.reconcile(team.bjtuss.bjtuselfservice.MainApplication.appContext)
             // 清除登录状态
             mainViewModel.gradeViewModel.clearAllPersistedGradeSelections()
             with(AppDatabase.getInstance()) {

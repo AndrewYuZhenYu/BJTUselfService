@@ -54,6 +54,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -80,6 +81,7 @@ import androidx.navigation.navArgument
 import dev.jeziellago.compose.markdowntext.MarkdownText
 import kotlinx.coroutines.launch
 import team.bjtuss.bjtuselfservice.MainApplication.Companion.appContext
+import team.bjtuss.bjtuselfservice.notification.CourseReminderScheduler
 import team.bjtuss.bjtuselfservice.RouteManager.ClassroomDetection
 import team.bjtuss.bjtuselfservice.repository.fetchLatestRelease
 import team.bjtuss.bjtuselfservice.screen.BuildingScreen
@@ -131,10 +133,15 @@ val LocalHasBackground = androidx.compose.runtime.compositionLocalOf { false }
 val LocalHazeState = androidx.compose.runtime.compositionLocalOf<dev.chrisbanes.haze.HazeState?> { null }
 
 class MainActivity : ComponentActivity() {
+    private var reminderNavigationRequest by mutableIntStateOf(0)
+
     @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (intent.getBooleanExtra(CourseReminderScheduler.OPEN_SCHEDULE_EXTRA, false)) {
+            reminderNavigationRequest++
+        }
         enableEdgeToEdge()
         CaptchaModel.init(this)
 
@@ -202,7 +209,11 @@ class MainActivity : ComponentActivity() {
                             LoginDialog(credentials)
                         }
 
-                        App(mainViewModel, hasBackground = bitmap != null)
+                        App(
+                            mainViewModel,
+                            hasBackground = bitmap != null,
+                            reminderNavigationRequest = reminderNavigationRequest,
+                        )
                         FloatingLoggingIndicator(appState)
 
                     }
@@ -210,6 +221,19 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra(CourseReminderScheduler.OPEN_SCHEDULE_EXTRA, false)) {
+            reminderNavigationRequest++
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        (application as MainApplication).refreshCourseReminders()
     }
 }
 
@@ -289,9 +313,21 @@ fun CheckUpdate() {
 
 
 @Composable
-fun App(mainViewModel: MainViewModel, hasBackground: Boolean = false) {
+fun App(
+    mainViewModel: MainViewModel,
+    hasBackground: Boolean = false,
+    reminderNavigationRequest: Int = 0,
+) {
 
     val navController = rememberNavController()
+    LaunchedEffect(reminderNavigationRequest) {
+        if (reminderNavigationRequest > 0) {
+            navController.navigate(RouteManager.CourseSchedule) {
+                popUpTo(RouteManager.Navigation)
+                launchSingleTop = true
+            }
+        }
+    }
     NavHost(navController = navController,
         startDestination = RouteManager.Navigation,
         enterTransition = { activityEnterTransition() },
@@ -588,4 +624,3 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.activityPopExitTra
         animationSpec = tween(DEFAULT_EXIT_DURATION, easing = FastOutLinearInEasing),
         targetOffset = { it })
 }
-

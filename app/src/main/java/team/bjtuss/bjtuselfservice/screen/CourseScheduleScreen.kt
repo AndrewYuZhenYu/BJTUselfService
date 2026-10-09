@@ -71,17 +71,13 @@ import androidx.compose.ui.window.DialogProperties
 import team.bjtuss.bjtuselfservice.entity.CourseEntity
 import team.bjtuss.bjtuselfservice.repository.DataStoreRepository
 import team.bjtuss.bjtuselfservice.utils.Utils
+import team.bjtuss.bjtuselfservice.utils.compactCoursePlace
 import team.bjtuss.bjtuselfservice.viewmodel.DataChange
 import team.bjtuss.bjtuselfservice.viewmodel.MainViewModel
 
 private val CourseTimeColumnWidth = 48.dp
 private val CourseRowMinHeight = 92.dp
 private val CourseCellPadding = 1.dp
-
-private data class CoursePlaceDisplay(
-    val building: String,
-    val room: String?
-)
 
 private data class CourseCardColors(
     val background: Color,
@@ -555,26 +551,8 @@ fun CourseScheduleGrid(
     }
 }
 
-fun parseCourseTime(courseTime: String): List<Int> {
-    try {
-        val courseTime2 = courseTime.replace("第", "").replace("周", "")
-        val courseTimeList = mutableListOf<Int>()
-        val timeList = courseTime2.split(",")
-        for (time in timeList) {
-            if (time.contains("-")) {
-                val timeRange = time.split("-")
-                for (i in timeRange[0].toInt()..timeRange[1].toInt()) {
-                    courseTimeList.add(i)
-                }
-            } else {
-                courseTimeList.add(time.toInt())
-            }
-        }
-        return courseTimeList
-    } catch (e: Exception) {
-        return emptyList()
-    }
-}
+fun parseCourseTime(courseTime: String): List<Int> =
+    team.bjtuss.bjtuselfservice.utils.parseCourseWeeks(courseTime)
 
 @Composable
 fun CourseCell(
@@ -812,35 +790,6 @@ private fun CourseNameOnlyCard(course: CourseEntity, modifier: Modifier = Modifi
                 overflow = TextOverflow.Ellipsis
             )
         }
-    }
-}
-
-private fun compactCoursePlace(place: String): CoursePlaceDisplay {
-    val fields = place.split(',', '，', limit = 3)
-    val hasCampus = fields.firstOrNull()?.trim() in listOf("海淀西校区", "海淀东校区")
-    return when {
-        hasCampus && fields.size >= 2 -> CoursePlaceDisplay(
-            building = shortBuildingName(fields[1]),
-            room = fields.getOrNull(2)
-        )
-        fields.size == 3 -> CoursePlaceDisplay(
-            building = "${fields[0]},${shortBuildingName(fields[1])}",
-            room = fields[2]
-        )
-        fields.size == 2 -> CoursePlaceDisplay(fields[0], fields[1])
-        else -> CoursePlaceDisplay(place, null)
-    }
-}
-
-private fun shortBuildingName(building: String): String {
-    return when (building.trim()) {
-        "学生活动服务中心" -> "学活"
-        "第九教学楼" -> "九教"
-        "第七教学楼" -> "七教"
-        "第五教学楼" -> "五教"
-        "第十七号教学楼" -> "建艺"
-        "逸夫教学楼" -> "逸夫楼"
-        else -> building
     }
 }
 

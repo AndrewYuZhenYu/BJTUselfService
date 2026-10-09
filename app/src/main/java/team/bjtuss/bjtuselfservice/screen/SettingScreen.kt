@@ -1,7 +1,12 @@
 package team.bjtuss.bjtuselfservice.screen
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +30,8 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Quiz
@@ -40,10 +47,12 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -73,12 +82,20 @@ import team.bjtuss.bjtuselfservice.statemanager.AuthenticatorManager
 import team.bjtuss.bjtuselfservice.ui.theme.Theme
 import team.bjtuss.bjtuselfservice.viewmodel.MainViewModel
 import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import team.bjtuss.bjtuselfservice.MainApplication
+import team.bjtuss.bjtuselfservice.notification.CourseReminderScheduler
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
@@ -86,6 +103,8 @@ import java.io.InputStream
 
 @Composable
 fun SettingScreen(mainViewModel: MainViewModel) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val studentInfo = StudentAccountManager.getInstance().studentInfo
     val settingViewModel = mainViewModel.settingViewModel
 
@@ -97,6 +116,47 @@ fun SettingScreen(mainViewModel: MainViewModel) {
     val checkUpdateEnable by settingViewModel.checkUpdateEnable.collectAsState()
     val currentTheme by settingViewModel.currentTheme.collectAsState()
     val dynamicColorEnable by settingViewModel.dynamicColorEnable.collectAsState()
+    val courseReminderEnabled by settingViewModel.courseReminderEnabled.collectAsState()
+    val courseReminderLeadMinutes by settingViewModel.courseReminderLeadMinutes.collectAsState()
+    var notificationsGranted by remember { mutableStateOf(CourseReminderScheduler.canPostNotifications(context)) }
+    var exactTimingGranted by remember { mutableStateOf(CourseReminderScheduler.canSchedulePrecisely(context)) }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                notificationsGranted = CourseReminderScheduler.canPostNotifications(context)
+                exactTimingGranted = CourseReminderScheduler.canSchedulePrecisely(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val exactAccessLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        exactTimingGranted = CourseReminderScheduler.canSchedulePrecisely(context)
+        (context.applicationContext as MainApplication).refreshCourseReminders()
+    }
+    val notificationSettingsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        notificationsGranted = CourseReminderScheduler.canPostNotifications(context)
+        (context.applicationContext as MainApplication).refreshCourseReminders()
+    }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        notificationsGranted = CourseReminderScheduler.canPostNotifications(context)
+        if (granted && !CourseReminderScheduler.canSchedulePrecisely(context)) {
+            exactAccessLauncher.launch(
+                Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                }
+            )
+        }
+        (context.applicationContext as MainApplication).refreshCourseReminders()
+    }
 
 
     LazyColumn(
@@ -261,6 +321,117 @@ fun SettingScreen(mainViewModel: MainViewModel) {
         }
 
         item {
+            Text(
+                text = "课前提醒",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+            )
+        }
+
+        item {
+            SwitchSettingItem(
+                title = "课前通知",
+                subtitle = "按本周课表发送系统通知",
+                iconContent = {
+                    Icon(
+                        imageVector = Icons.Default.NotificationsActive,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                },
+                checked = courseReminderEnabled,
+                onCheckedChange = { enabled ->
+                    settingViewModel.setCourseReminderEnabled(enabled)
+                    if (enabled) {
+                        val needsNotificationPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                            PackageManager.PERMISSION_GRANTED
+                        if (needsNotificationPermission) {
+                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else if (!CourseReminderScheduler.canSchedulePrecisely(context)) {
+                            exactAccessLauncher.launch(
+                                Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                                    data = Uri.parse("package:${context.packageName}")
+                                }
+                            )
+                        }
+                    }
+                }
+            )
+        }
+
+        if (courseReminderEnabled) {
+            item {
+                DropdownSettingItem(
+                    title = "提前通知",
+                    icon = Icons.Default.NotificationsActive,
+                    selectedOption = "${courseReminderLeadMinutes} 分钟",
+                    options = listOf("5 分钟", "10 分钟", "15 分钟", "30 分钟"),
+                    onOptionSelected = { option ->
+                        option.substringBefore(' ').toIntOrNull()?.let(settingViewModel::setCourseReminderLeadMinutes)
+                    }
+                )
+            }
+
+            if (!notificationsGranted) {
+                item {
+                    SettingItem(
+                        title = "允许系统通知",
+                        subtitle = "未授权时无法显示课前提醒",
+                        iconContent = {
+                            Icon(Icons.Default.NotificationsOff, null, tint = MaterialTheme.colorScheme.primary)
+                        },
+                        onClick = {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                                PackageManager.PERMISSION_GRANTED
+                            ) {
+                                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                notificationSettingsLauncher.launch(
+                                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                        putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                    }
+                                )
+                            }
+                        }
+                    )
+                }
+            }
+
+            if (!exactTimingGranted) {
+                item {
+                    SettingItem(
+                        title = "允许精确时间提醒",
+                        subtitle = "未授权时无法按所选提前量发送",
+                        iconContent = {
+                            Icon(Icons.Default.NotificationsActive, null, tint = MaterialTheme.colorScheme.primary)
+                        },
+                        onClick = {
+                            exactAccessLauncher.launch(
+                                Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                                    data = Uri.parse("package:${context.packageName}")
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+        }
+
+        if (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) {
+            item {
+                Text(
+                    text = "通知测试",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                )
+            }
+            item { CourseReminderTestControls(courseReminderLeadMinutes) }
+        }
+
+        item {
             SwitchSettingItem(
                 title = "打开更新提示",
                 iconContent = {
@@ -297,6 +468,89 @@ fun SettingScreen(mainViewModel: MainViewModel) {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun CourseReminderTestControls(leadMinutes: Int) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val weekdays = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
+    var selectedWeekday by remember { mutableStateOf(LocalDate.now().dayOfWeek.value) }
+    var simulatedTime by remember { mutableStateOf("07:50") }
+    var resultText by remember { mutableStateOf("") }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        DropdownSettingItem(
+            title = "模拟星期",
+            selectedOption = weekdays[selectedWeekday - 1],
+            options = weekdays,
+            onOptionSelected = { day -> selectedWeekday = weekdays.indexOf(day) + 1 }
+        )
+        OutlinedTextField(
+            value = simulatedTime,
+            onValueChange = { simulatedTime = it },
+            label = { Text("模拟时间 HH:mm") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            TextButton(
+                onClick = {
+                    scope.launch {
+                        val suggestion = CourseReminderScheduler.suggestTestTime(context)
+                        if (suggestion == null) {
+                            resultText = "本周没有可测试课程，或周数尚未核验"
+                        } else {
+                            selectedWeekday = suggestion.first
+                            simulatedTime = suggestion.second.format(DateTimeFormatter.ofPattern("HH:mm"))
+                            resultText = ""
+                        }
+                    }
+                },
+                modifier = Modifier.weight(1f)
+            ) { Text("填入课程时间") }
+            Button(
+                onClick = {
+                    val time = runCatching {
+                        LocalTime.parse(simulatedTime, DateTimeFormatter.ofPattern("H:mm"))
+                    }.getOrNull()
+                    if (time == null) {
+                        resultText = "请输入有效时间，例如 07:50"
+                    } else {
+                        scope.launch {
+                            val outcome = CourseReminderScheduler.sendTestNotification(
+                                context, selectedWeekday, time
+                            )
+                            resultText = when (outcome.result) {
+                                CourseReminderScheduler.TestResult.SENT -> "已发送 ${outcome.count} 条测试通知"
+                                CourseReminderScheduler.TestResult.REMINDER_DISABLED -> "请先开启课前通知"
+                                CourseReminderScheduler.TestResult.NOTIFICATION_PERMISSION_REQUIRED -> "请先允许系统通知"
+                                CourseReminderScheduler.TestResult.WEEK_NOT_VERIFIED -> "本周周数尚未联网核验"
+                                CourseReminderScheduler.TestResult.NO_MATCHING_COURSE -> "这个时段没有待提醒课程"
+                                CourseReminderScheduler.TestResult.NOT_DEBUG_BUILD -> "此入口只在 Debug 版本可用"
+                            }
+                        }
+                    }
+                },
+                modifier = Modifier.weight(1f)
+            ) { Text("模拟发送") }
+        }
+        if (resultText.isNotEmpty()) {
+            Text(
+                text = resultText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Text(
+            text = "当前提前 ${leadMinutes} 分钟",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

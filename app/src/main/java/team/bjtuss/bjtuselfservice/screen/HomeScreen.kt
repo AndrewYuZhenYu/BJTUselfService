@@ -6,27 +6,35 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -40,15 +48,20 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -61,12 +74,15 @@ import team.bjtuss.bjtuselfservice.entity.CourseEntity
 import team.bjtuss.bjtuselfservice.entity.ExamScheduleEntity
 import team.bjtuss.bjtuselfservice.entity.GradeEntity
 import team.bjtuss.bjtuselfservice.entity.HomeworkEntity
+import team.bjtuss.bjtuselfservice.repository.DataStoreRepository
 import team.bjtuss.bjtuselfservice.statemanager.AppEvent
 import team.bjtuss.bjtuselfservice.statemanager.AppEventManager
 import team.bjtuss.bjtuselfservice.statemanager.AppState
 import team.bjtuss.bjtuselfservice.statemanager.AppStateManager
 import team.bjtuss.bjtuselfservice.viewmodel.DataChange
 import team.bjtuss.bjtuselfservice.viewmodel.MainViewModel
+import team.bjtuss.bjtuselfservice.utils.parseCourseWeeks
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
@@ -75,10 +91,6 @@ import java.time.temporal.ChronoUnit
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(navController: NavController, mainViewModel: MainViewModel) {
-
-    // 使用 mutableStateOf 来追踪刷新状态
-//    var isRefreshing by remember { mutableStateOf(false) }
-
     val appState by AppStateManager.appState.collectAsState()
     val refreshState =
         rememberSwipeRefreshState(isRefreshing = appState == AppState.NetworkProgress)
@@ -97,16 +109,46 @@ fun HomeScreen(navController: NavController, mainViewModel: MainViewModel) {
     var showGradeDialog by remember { mutableStateOf(false) }
     var showHomeworkDialog by remember { mutableStateOf(false) }
     var showExamDialog by remember { mutableStateOf(false) }
+    var showGradeChanges by rememberSaveable { mutableStateOf(false) }
+    var showHomeworkChanges by rememberSaveable { mutableStateOf(false) }
+    var showOtherNotifications by rememberSaveable { mutableStateOf(false) }
 
 
     val autoSyncGradeEnable by mainViewModel.settingViewModel.autoSyncGradeEnable.collectAsState()
     val autoSyncHomeworkEnable by mainViewModel.settingViewModel.autoSyncHomeworkEnable.collectAsState()
     val autoSyncScheduleEnable by mainViewModel.settingViewModel.autoSyncScheduleEnable.collectAsState()
     val autoSyncExamEnable by mainViewModel.settingViewModel.autoSyncExamEnable.collectAsState()
-    // 刷新处理函数
+    val storedCurrentWeek by DataStoreRepository.getCurrentWeek().collectAsState(0)
+    val classroomMap by mainViewModel.classroomViewModel.classroomMap.collectAsState()
+    val currentWeek = storedCurrentWeek.takeIf { it > 0 }
+        ?: classroomMap["nowWeek"]?.firstOrNull()
+        ?: 0
+    val courseList by mainViewModel.courseScheduleViewModel.nextTermCourseList.collectAsState()
+    val today = LocalDate.now()
+    val weekday = today.dayOfWeek.value
+    val todayCourses = remember(courseList, currentWeek, weekday) {
+        if (currentWeek <= 0) emptyList() else (0..6).flatMap { period ->
+            courseList.getOrNull(period * 8 + weekday).orEmpty()
+                .filter { currentWeek in parseCourseWeeks(it.courseTime) }
+                .map { period to it }
+        }
+    }
+
+    LaunchedEffect(gradeChangeList, autoSyncGradeEnable) {
+        if (autoSyncGradeEnable && gradeChangeList.isNotEmpty()) mainViewModel.gradeViewModel.syncDataAndClearChange()
+    }
+    LaunchedEffect(homeworkChangeList, autoSyncHomeworkEnable) {
+        if (autoSyncHomeworkEnable && homeworkChangeList.isNotEmpty()) mainViewModel.homeworkViewModel.syncDataAndClearChange()
+    }
+    LaunchedEffect(courseChangeList, autoSyncScheduleEnable) {
+        if (autoSyncScheduleEnable && courseChangeList.isNotEmpty()) mainViewModel.courseScheduleViewModel.syncDataAndClearChange()
+    }
+    LaunchedEffect(examChangeList, autoSyncExamEnable) {
+        if (autoSyncExamEnable && examChangeList.isNotEmpty()) mainViewModel.examScheduleViewModel.syncDataAndClearChange()
+    }
+
     val handleRefresh = {
         if (appState != AppState.NetworkProgress) {
-            println("379183912")
             AppEventManager.sendEvent(AppEvent.DataSyncRequest)
         }
     }
@@ -114,129 +156,90 @@ fun HomeScreen(navController: NavController, mainViewModel: MainViewModel) {
     val backgroundImageUri by mainViewModel.settingViewModel.backgroundImageUri.collectAsState()
     val hasBackground = backgroundImageUri.isNotEmpty()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        // Status Info Section
-        StatusInfo(
-            ecardBalance = formatEcardBalance(status?.EcardBalance),
-            netBalance = formatNetBalance(status?.NetBalance),
-            newMailCount = formatNewMailCount(status?.NewMailCount),
-            navController = navController,
-            hasBackground = hasBackground
-        )
-
-
-        CalendarComponent(mainViewModel)
-
-
-        Text(
-            text = "ATTENTION!!!",
-            style = MaterialTheme.typography.headlineMedium.copy(
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Bold,
-            ),
-            modifier = Modifier.padding(start = 16.dp, top = 8.dp)
-        )
-
-
-
-        SwipeRefresh(
-            state = refreshState,
-            onRefresh = handleRefresh,
-            modifier = Modifier.fillMaxSize()
+    SwipeRefresh(state = refreshState, onRefresh = handleRefresh, modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            LazyColumn(
-                modifier = Modifier
-                    .padding(8.dp)
-                    .fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                item {
-                    HomeworkNoticeCard(homeworkList, navController, hasBackground = hasBackground)
-                }
-
-                // Grade Changes Section
-                if (gradeChangeList.isNotEmpty()) {
-                    if (autoSyncGradeEnable) {
-                        mainViewModel.gradeViewModel.syncDataAndClearChange()
-                    } else {
-                        item {
-                            ChangeSection(
-                                title = "成绩单变动",
-                                changes = gradeChangeList,
-                                onItemClick = { change ->
-                                    selectedGradeChange = change
-                                    showGradeDialog = true
-                                },
-                                hasBackground = hasBackground
-                            )
-                        }
+            item {
+                HomeNotificationShortcuts(
+                    mailCount = status?.NewMailCount?.trim()?.toIntOrNull() ?: 0,
+                    gradeCount = if (autoSyncGradeEnable) 0 else gradeChangeList.sumOf { it.itemCount() },
+                    homeworkCount = if (autoSyncHomeworkEnable) 0 else homeworkChangeList.sumOf { it.itemCount() },
+                    onMailClick = { navController.navigate(RouteManager.Email) },
+                    onGradeClick = {
+                        if (!autoSyncGradeEnable && gradeChangeList.isNotEmpty()) showGradeChanges = true
+                        else navController.navigate(RouteManager.Grade)
+                    },
+                    onHomeworkClick = {
+                        if (!autoSyncHomeworkEnable && homeworkChangeList.isNotEmpty()) showHomeworkChanges = true
+                        else navController.navigate(RouteManager.HomeWork)
                     }
-                }
-
-                // Course Changes Section
-                if (courseChangeList.isNotEmpty()) {
-                    if (autoSyncScheduleEnable) {
-                        mainViewModel.courseScheduleViewModel.syncDataAndClearChange()
-                    } else {
-                        item {
-                            ChangeSection(
-                                title = "课程表变动",
-                                changes = courseChangeList,
-                                onItemClick = { _ ->
-                                    navController.navigate(RouteManager.CourseSchedule)
-                                },
-                                hasBackground = hasBackground
-                            )
-                        }
+                )
+            }
+            item { CalendarComponent(mainViewModel) }
+            item {
+                DailyCourseSection(
+                    courses = todayCourses,
+                    currentWeek = currentWeek,
+                    onCourseClick = { navController.navigate(RouteManager.CourseSchedule) }
+                )
+            }
+            item {
+                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showOtherNotifications = !showOtherNotifications }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("其他通知", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Icon(
+                            imageVector = if (showOtherNotifications) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (showOtherNotifications) "收起其他通知" else "展开其他通知"
+                        )
                     }
-                }
-
-                // Exam Changes Section
-                if (examChangeList.isNotEmpty()) {
-                    if (autoSyncExamEnable) {
-                        mainViewModel.examScheduleViewModel.syncDataAndClearChange()
-                    } else {
-                        item {
-                            ChangeSection(
-                                title = "考试安排变动",
-                                changes = examChangeList,
-                                onItemClick = { change ->
+                    if (showOtherNotifications) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            EcardButton({ Text("校园卡余额：${status?.EcardBalance ?: "未知"}") }, hasBackground)
+                            NetButton({ Text("校园网余额：${status?.NetBalance ?: "未知"}") }, hasBackground)
+                            HomeworkNoticeCard(homeworkList, navController, hasBackground)
+                            if (!autoSyncScheduleEnable && courseChangeList.isNotEmpty()) {
+                                ChangeSection("课程表变动", courseChangeList, { navController.navigate(RouteManager.CourseSchedule) }, hasBackground)
+                            }
+                            if (!autoSyncExamEnable && examChangeList.isNotEmpty()) {
+                                ChangeSection("考试安排变动", examChangeList, { change ->
                                     selectedExamChange = change
                                     showExamDialog = true
-                                },
-                                hasBackground = hasBackground
-                            )
-                        }
-                    }
-
-                }
-
-                // Homework Changes Section
-                if (homeworkChangeList.isNotEmpty()) {
-                    if (autoSyncHomeworkEnable) {
-                        mainViewModel.homeworkViewModel.syncDataAndClearChange()
-                    } else {
-                        item {
-                            ChangeSection(
-                                title = "作业变动",
-                                changes = homeworkChangeList,
-                                onItemClick = { change ->
-                                    selectedHomeworkChange = change
-                                    showHomeworkDialog = true
-                                },
-                                hasBackground = hasBackground
-                            )
+                                }, hasBackground)
+                            }
                         }
                     }
                 }
             }
-
         }
+    }
+
+    if (showGradeChanges) {
+        ChangeListDialog("成绩单变动", gradeChangeList, {
+            showGradeChanges = false
+        }, { change ->
+            selectedGradeChange = change
+            showGradeChanges = false
+            showGradeDialog = true
+        }, { navController.navigate(RouteManager.Grade) })
+    }
+    if (showHomeworkChanges) {
+        ChangeListDialog("作业变动", homeworkChangeList, {
+            showHomeworkChanges = false
+        }, { change ->
+            selectedHomeworkChange = change
+            showHomeworkChanges = false
+            showHomeworkDialog = true
+        }, { navController.navigate(RouteManager.HomeWork) })
     }
 
     // Dialogs
@@ -297,100 +300,204 @@ private fun <T> ChangeSection(
     }
 }
 
-// 格式化工具函数
-private fun formatEcardBalance(balance: String?): String {
-    val balanceText = "校园卡余额：$balance"
-    return if (balance?.toDoubleOrNull() ?: 0.0 < 20) {
-        "$balanceText，该充了"
-    } else {
-        balanceText
-    }
-}
-
-private fun formatNetBalance(balance: String?): String {
-    val balanceText = "校园网余额：$balance"
-    return if (balance == "0") {
-        "$balanceText，😱没网了"
-    } else {
-        balanceText
-    }
-}
-
-private fun formatNewMailCount(count: String?): String {
-    val mailText = "新邮件：$count"
-    return if (count != "0") {
-        "$mailText，记得去看哦"
-    } else {
-        mailText
-    }
+private fun <T> DataChange<T>.itemCount(): Int = when (this) {
+    is DataChange.Added -> items.size
+    is DataChange.Modified -> items.size
+    is DataChange.Deleted -> items.size
 }
 
 @Composable
-fun StatusInfo(
-    ecardBalance: String,
-    netBalance: String,
-    newMailCount: String,
-    navController: NavController,
-    hasBackground: Boolean = false
+private fun HomeNotificationShortcuts(
+    mailCount: Int,
+    gradeCount: Int,
+    homeworkCount: Int,
+    onMailClick: () -> Unit,
+    onGradeClick: () -> Unit,
+    onHomeworkClick: () -> Unit,
 ) {
-
-    Column(
-        modifier = Modifier.padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            MailButton({
-                Text(newMailCount, fontSize = 18.sp)
-            }, navController, hasBackground)
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            EcardButton({ Text(ecardBalance, fontSize = 18.sp) }, hasBackground)
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            NetButton({ Text(netBalance, fontSize = 18.sp) }, hasBackground)
-        }
+        NotificationShortcut(
+            label = "新邮件", count = mailCount, icon = Icons.Default.Email,
+            background = MaterialTheme.colorScheme.primaryContainer,
+            foreground = MaterialTheme.colorScheme.onPrimaryContainer,
+            onClick = onMailClick,
+            modifier = Modifier.weight(1f)
+        )
+        NotificationShortcut(
+            label = "成绩单", count = gradeCount,
+            icon = Icons.AutoMirrored.Outlined.InsertDriveFile, symbol = "100",
+            background = MaterialTheme.colorScheme.tertiaryContainer,
+            foreground = MaterialTheme.colorScheme.onTertiaryContainer,
+            onClick = onGradeClick,
+            modifier = Modifier.weight(1f)
+        )
+        NotificationShortcut(
+            label = "作业", count = homeworkCount, icon = Icons.Default.Edit,
+            background = MaterialTheme.colorScheme.secondaryContainer,
+            foreground = MaterialTheme.colorScheme.onSecondaryContainer,
+            onClick = onHomeworkClick,
+            modifier = Modifier.weight(1f)
+        )
     }
-
 }
 
 @Composable
-fun MailButton(content: @Composable () -> Unit, navController: NavController, hasBackground: Boolean = false) {
-    Button(
-        onClick = {
-            navController.navigate(RouteManager.Email)
-        },
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(32.dp),
-        border = if (hasBackground) androidx.compose.foundation.BorderStroke(1.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.5f)) else null,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (hasBackground) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.primaryContainer,
-            contentColor = if (hasBackground) androidx.compose.ui.graphics.Color.White else MaterialTheme.colorScheme.onPrimaryContainer
-        ),
-        elevation = ButtonDefaults.buttonElevation(defaultElevation = if (hasBackground) 0.dp else 2.dp)
+private fun NotificationShortcut(
+    label: String,
+    count: Int,
+    background: Color,
+    foreground: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    symbol: String? = null,
+) {
+    Column(modifier = modifier.clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(modifier = Modifier.size(86.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .align(Alignment.BottomStart)
+                    .clip(CircleShape)
+                    .background(background),
+                contentAlignment = Alignment.Center
+            ) {
+                if (icon != null) {
+                    Icon(
+                        icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(if (symbol != null) 44.dp else 30.dp),
+                        tint = foreground
+                    )
+                }
+                if (symbol != null) {
+                    Text(
+                        symbol,
+                        modifier = Modifier.offset(y = (-3).dp),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = foreground
+                    )
+                }
+            }
+            Box(
+                modifier = Modifier.size(28.dp).align(Alignment.TopEnd).background(MaterialTheme.colorScheme.error, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (count > 99) "99+" else count.coerceAtLeast(0).toString(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onError,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+@Composable
+private fun DailyCourseSection(
+    courses: List<Pair<Int, CourseEntity>>,
+    currentWeek: Int,
+    onCourseClick: () -> Unit,
+) {
+    val times = listOf(
+        "08:00" to "09:50", "10:10" to "12:00", "12:10" to "14:00",
+        "14:10" to "16:00", "16:20" to "18:10", "19:00" to "20:50",
+        "21:00" to "21:50"
+    )
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Start
-        ) {
-            Icon(
-                imageVector = Icons.Default.Email,
-                contentDescription = "New Mail",
-                tint = if (hasBackground) androidx.compose.ui.graphics.Color.White else MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(28.dp)
-            )
-            Spacer(modifier = Modifier.width(16.dp))
-            content()
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("本日课程", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.weight(1f))
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = "Open",
-                tint = if (hasBackground) androidx.compose.ui.graphics.Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+            if (currentWeek > 0) {
+                Text("共 ${courses.size} 节", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        if (courses.isEmpty()) {
+            Text(
+                text = if (currentWeek > 0) "今天没有课程" else "教学周尚未同步",
+                modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
             )
+        } else {
+            courses.forEach { (period, course) ->
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(
+                        modifier = Modifier.width(64.dp).padding(top = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("第${period + 1}节", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(times[period].first, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(times[period].second, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Card(
+                        onClick = onCourseClick,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(course.courseName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            if (course.coursePlace.isNotBlank()) {
+                                Text("上课地点：${course.coursePlace}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            if (course.courseTeacher.isNotBlank()) {
+                                Text("上课老师：${course.courseTeacher}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
+}
+
+@Composable
+private fun <T> ChangeListDialog(
+    title: String,
+    changes: List<DataChange<T>>,
+    onDismiss: () -> Unit,
+    onChangeClick: (DataChange<T>) -> Unit,
+    onNavigate: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                changes.forEach { change ->
+                    val label = when (change) {
+                        is DataChange.Added -> "新增 ${change.items.size} 项"
+                        is DataChange.Modified -> "变化 ${change.items.size} 项"
+                        is DataChange.Deleted -> "删除 ${change.items.size} 项"
+                    }
+                    TextButton(onClick = { onChangeClick(change) }, modifier = Modifier.fillMaxWidth()) {
+                        Text(label, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onDismiss()
+                onNavigate()
+            }) { Text("查看全部") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("关闭") } }
+    )
 }
 
 @Composable
@@ -401,26 +508,26 @@ fun EcardButton(content: @Composable () -> Unit, hasBackground: Boolean = false)
     Button(
         onClick = { showDialog = true },
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(32.dp),
-        border = if (hasBackground) androidx.compose.foundation.BorderStroke(1.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.5f)) else null,
+        shape = RoundedCornerShape(8.dp),
+        border = if (hasBackground) androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)) else null,
         colors = ButtonDefaults.buttonColors(
-            containerColor = if (hasBackground) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.primaryContainer,
-            contentColor = if (hasBackground) androidx.compose.ui.graphics.Color.White else MaterialTheme.colorScheme.onPrimaryContainer
+            containerColor = if (hasBackground) Color.Transparent else MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = if (hasBackground) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
         ),
-        elevation = ButtonDefaults.buttonElevation(defaultElevation = if (hasBackground) 0.dp else 2.dp)
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp),
+                .padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Start
         ) {
             Icon(
                 imageVector = Icons.Default.AccountBalanceWallet,
                 contentDescription = "Ecard Balance",
-                tint = if (hasBackground) androidx.compose.ui.graphics.Color.White else MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(28.dp)
+                tint = if (hasBackground) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp)
             )
             Spacer(modifier = Modifier.width(16.dp))
             content()
@@ -428,7 +535,7 @@ fun EcardButton(content: @Composable () -> Unit, hasBackground: Boolean = false)
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = "Open",
-                tint = if (hasBackground) androidx.compose.ui.graphics.Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                tint = if (hasBackground) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             )
         }
     }
@@ -485,26 +592,26 @@ fun NetButton(content: @Composable () -> Unit, hasBackground: Boolean = false) {
     Button(
         onClick = { showDialog = true },
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(32.dp),
-        border = if (hasBackground) androidx.compose.foundation.BorderStroke(1.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.5f)) else null,
+        shape = RoundedCornerShape(8.dp),
+        border = if (hasBackground) androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)) else null,
         colors = ButtonDefaults.buttonColors(
-            containerColor = if (hasBackground) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.primaryContainer,
-            contentColor = if (hasBackground) androidx.compose.ui.graphics.Color.White else MaterialTheme.colorScheme.onPrimaryContainer
+            containerColor = if (hasBackground) Color.Transparent else MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = if (hasBackground) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
         ),
-        elevation = ButtonDefaults.buttonElevation(defaultElevation = if (hasBackground) 0.dp else 2.dp)
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp),
+                .padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Start
         ) {
             Icon(
                 imageVector = Icons.Default.Wifi,
                 contentDescription = "Net Balance",
-                tint = if (hasBackground) androidx.compose.ui.graphics.Color.White else MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(28.dp)
+                tint = if (hasBackground) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp)
             )
             Spacer(modifier = Modifier.width(16.dp))
             content()
@@ -512,7 +619,7 @@ fun NetButton(content: @Composable () -> Unit, hasBackground: Boolean = false) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = "Open",
-                tint = if (hasBackground) androidx.compose.ui.graphics.Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                tint = if (hasBackground) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             )
         }
     }

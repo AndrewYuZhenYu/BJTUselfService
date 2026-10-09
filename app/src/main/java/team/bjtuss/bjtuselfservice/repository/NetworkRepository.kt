@@ -145,11 +145,12 @@ object NetworkRepository {
                         0
                     }
                 }
-            DataStoreRepository.setCurrentWeek(currentWeek)
+            if (currentWeek > 0) {
+                DataStoreRepository.setVerifiedCurrentWeek(currentWeek, System.currentTimeMillis())
+            }
             currentWeek
         }
     }
 
 
 }
-
