@@ -11,8 +11,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -20,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -50,6 +53,7 @@ fun SpaceScreen(navController: NavController) {
             SpaceCard(
                 title = space.title,
                 image = space.image,
+                icon = space.icon,
                 backgroundColor = MaterialTheme.colorScheme.primary
             ) {
                 navController.navigate(space.route)
@@ -61,7 +65,8 @@ fun SpaceScreen(navController: NavController) {
 @Composable
 fun SpaceCard(
     title: String,
-    image: Int,
+    image: Int?,
+    icon: ImageVector? = null,
     backgroundColor: Color,
     modifier: Modifier = Modifier,
     contentModifier: Modifier = Modifier,
@@ -99,13 +104,21 @@ fun SpaceCard(
                     fontWeight = FontWeight.SemiBold
                 )
             )
-            Image(
-                modifier = Modifier
-                    .size(70.dp)
-                    .align(Alignment.End),
-                painter = painterResource(id = image),
-                contentDescription = title
-            )
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = title,
+                    tint = Color.White,
+                    modifier = Modifier.size(70.dp).align(Alignment.End)
+                )
+            } else if (image != null) {
+                Image(
+                    modifier = Modifier.size(70.dp).align(Alignment.End),
+                    painter = painterResource(id = image),
+                    contentDescription = title,
+                    contentScale = if (image == R.drawable.room_occupancy) ContentScale.Crop else ContentScale.Fit
+                )
+            }
 
         }
     }
@@ -117,14 +130,16 @@ private val spaces = listOf(
     Space("考试安排", R.drawable.exam, RouteManager.ExamSchedule),
     Space("作业", R.drawable.homework, RouteManager.HomeWork),
     Space("课件", R.drawable.courseware, RouteManager.Courseware),
+    Space("教室占用", R.drawable.room_occupancy, RouteManager.RoomOccupancy),
     Space("教室人数评估", R.drawable.detect, RouteManager.Building),
     Space("其他功能", R.drawable.other_function, RouteManager.OtherFunction)
 )
 
 private data class Space(
     val title: String,
-    val image: Int,
-    val route: String
+    val image: Int?,
+    val route: String,
+    val icon: ImageVector? = null,
 )
 
 

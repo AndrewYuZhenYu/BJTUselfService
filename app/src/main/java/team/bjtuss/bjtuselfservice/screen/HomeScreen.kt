@@ -4,9 +4,9 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,7 +25,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowForward
@@ -57,17 +55,21 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavController
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
+import team.bjtuss.bjtuselfservice.R
 import team.bjtuss.bjtuselfservice.RouteManager
 import team.bjtuss.bjtuselfservice.component.CalendarComponent
 import team.bjtuss.bjtuselfservice.entity.CourseEntity
@@ -320,15 +322,15 @@ private fun HomeNotificationShortcuts(
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         NotificationShortcut(
-            label = "新邮件", count = mailCount, icon = Icons.Default.Email,
+            label = "邮件", count = mailCount, icon = Icons.Default.Email,
             background = MaterialTheme.colorScheme.primaryContainer,
             foreground = MaterialTheme.colorScheme.onPrimaryContainer,
             onClick = onMailClick,
             modifier = Modifier.weight(1f)
         )
         NotificationShortcut(
-            label = "成绩单", count = gradeCount,
-            icon = Icons.AutoMirrored.Outlined.InsertDriveFile, symbol = "100",
+            label = "成绩", count = gradeCount,
+            imageRes = R.drawable.grade_report_icon,
             background = MaterialTheme.colorScheme.tertiaryContainer,
             foreground = MaterialTheme.colorScheme.onTertiaryContainer,
             onClick = onGradeClick,
@@ -353,33 +355,31 @@ private fun NotificationShortcut(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
-    symbol: String? = null,
+    imageRes: Int? = null,
 ) {
     Column(modifier = modifier.clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(modifier = Modifier.size(86.dp)) {
             Box(
                 modifier = Modifier
                     .size(72.dp)
-                    .align(Alignment.BottomStart)
+                    .align(Alignment.BottomCenter)
                     .clip(CircleShape)
                     .background(background),
                 contentAlignment = Alignment.Center
             ) {
-                if (icon != null) {
+                if (imageRes != null) {
+                    Image(
+                        painter = painterResource(imageRes),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit
+                    )
+                } else if (icon != null) {
                     Icon(
                         icon,
                         contentDescription = null,
-                        modifier = Modifier.size(if (symbol != null) 44.dp else 30.dp),
+                        modifier = Modifier.size(30.dp),
                         tint = foreground
-                    )
-                }
-                if (symbol != null) {
-                    Text(
-                        symbol,
-                        modifier = Modifier.offset(y = (-3).dp),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = foreground
                     )
                 }
             }

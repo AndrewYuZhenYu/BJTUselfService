@@ -94,6 +94,8 @@ import team.bjtuss.bjtuselfservice.screen.GradeScreen
 import team.bjtuss.bjtuselfservice.screen.HomeScreen
 import team.bjtuss.bjtuselfservice.screen.HomeworkScreen
 import team.bjtuss.bjtuselfservice.screen.OtherFunctionScreen
+import team.bjtuss.bjtuselfservice.screen.RoomOccupancyScreen
+import team.bjtuss.bjtuselfservice.screen.SchoolCalendarScreen
 import team.bjtuss.bjtuselfservice.screen.SettingScreen
 import team.bjtuss.bjtuselfservice.screen.SpaceScreen
 import team.bjtuss.bjtuselfservice.statemanager.AppState
@@ -340,6 +342,9 @@ fun App(
         composable(RouteManager.CourseSchedule) {
             CourseScheduleScreen(mainViewModel)
         }
+        composable(RouteManager.RoomOccupancy) {
+            RoomOccupancyScreen(mainViewModel, onBack = { navController.popBackStack() })
+        }
         composable(RouteManager.ExamSchedule) {
             ExamScheduleScreen(mainViewModel)
         }
@@ -363,7 +368,10 @@ fun App(
             HomeworkScreen(mainViewModel)
         }
         composable(RouteManager.OtherFunction) {
-            OtherFunctionScreen()
+            OtherFunctionScreen(onCalendarClick = { navController.navigate(RouteManager.SchoolCalendar) })
+        }
+        composable(RouteManager.SchoolCalendar) {
+            SchoolCalendarScreen(onBack = { navController.popBackStack() })
         }
         composable(RouteManager.Courseware) {
             CoursewareScreen(mainViewModel)
@@ -457,9 +465,11 @@ object RouteManager {
     const val ClassroomDetection: String = "ClassroomDetection/{buildingName}"
     const val Grade: String = "Grade"
     const val CourseSchedule: String = "CourseSchedule"
+    const val RoomOccupancy: String = "RoomOccupancy"
     const val Email: String = "Email"
     const val HomeWork: String = "HomeWork"
     const val OtherFunction: String = "OtherFunction"
+    const val SchoolCalendar: String = "SchoolCalendar"
 
     //    const val CoursePlatform: String = "CoursePlatform"
     const val Courseware: String = "Courseware"

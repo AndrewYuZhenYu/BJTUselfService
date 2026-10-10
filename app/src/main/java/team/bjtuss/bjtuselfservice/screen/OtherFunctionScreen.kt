@@ -30,12 +30,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.MarkEmailRead
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -80,7 +82,7 @@ import team.bjtuss.bjtuselfservice.repository.OtherFunctionNetworkRepository
 import team.bjtuss.bjtuselfservice.utils.KotlinUtils
 
 @Composable
-fun OtherFunctionScreen() {
+fun OtherFunctionScreen(onCalendarClick: () -> Unit) {
     // State management using remember and mutableStateOf
     var isEnglishGrade by remember { mutableStateOf(false) }
     var isDownloading by remember { mutableStateOf(false) }
@@ -133,19 +135,11 @@ fun OtherFunctionScreen() {
                 // School Calendar Card
                 item {
                     FunctionCard(
-                        title = "校历下载",
-                        description = "查看并下载学校最新的校历信息",
-                        icon = Icons.Filled.School,
-                        onClick = {
-                            handleDownload(
-                                coroutineScope,
-                                "校历",
-                                { downloadSchoolCalendar() },
-                                { isDownloading = it },
-                                { showSuccessMessage = it },
-                                { downloadType = it }
-                            )
-                        }
+                        title = "校历查看",
+                        functionStr = "查看",
+                        description = "学校校历与教学周",
+                        icon = Icons.Filled.CalendarMonth,
+                        onClick = onCalendarClick
                     )
                 }
 
@@ -769,10 +763,11 @@ fun FunctionCard(
                     )
                 ) {
                     Icon(
-                        imageVector = if (functionStr == "订阅")
-                            Icons.Filled.Email
-                        else
-                            Icons.Filled.CloudDownload,
+                        imageVector = when (functionStr) {
+                            "订阅" -> Icons.Filled.Email
+                            "查看" -> Icons.Filled.Visibility
+                            else -> Icons.Filled.CloudDownload
+                        },
                         contentDescription = null,
                         modifier = Modifier.size(16.dp)
                     )
@@ -787,12 +782,6 @@ fun FunctionCard(
 /**
  * Improved download functions with suspend modifier for proper coroutine usage
  */
-suspend fun downloadSchoolCalendar() {
-    withContext(Dispatchers.IO) {
-        OtherFunctionNetworkRepository.downloadSchoolCalendar()
-    }
-}
-
 suspend fun downloadGradeList(isEnglish: Boolean) {
     withContext(Dispatchers.IO) {
         OtherFunctionNetworkRepository.downloadGradeList(isEnglish)
