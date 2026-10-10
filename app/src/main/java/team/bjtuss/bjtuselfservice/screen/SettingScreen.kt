@@ -2,7 +2,6 @@ package team.bjtuss.bjtuselfservice.screen
 
 import android.Manifest
 import android.content.Intent
-import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -47,7 +46,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -82,8 +80,6 @@ import team.bjtuss.bjtuselfservice.statemanager.AuthenticatorManager
 import team.bjtuss.bjtuselfservice.ui.theme.Theme
 import team.bjtuss.bjtuselfservice.viewmodel.MainViewModel
 import java.time.Instant
-import java.time.LocalDate
-import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -420,17 +416,6 @@ fun SettingScreen(mainViewModel: MainViewModel) {
             }
         }
 
-        if (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) {
-            item {
-                Text(
-                    text = "通知测试",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
-                )
-            }
-            item { CourseReminderTestControls(courseReminderLeadMinutes) }
-        }
-
         item {
             SwitchSettingItem(
                 title = "打开更新提示",
@@ -468,89 +453,6 @@ fun SettingScreen(mainViewModel: MainViewModel) {
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun CourseReminderTestControls(leadMinutes: Int) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val weekdays = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
-    var selectedWeekday by remember { mutableStateOf(LocalDate.now().dayOfWeek.value) }
-    var simulatedTime by remember { mutableStateOf("07:50") }
-    var resultText by remember { mutableStateOf("") }
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        DropdownSettingItem(
-            title = "模拟星期",
-            selectedOption = weekdays[selectedWeekday - 1],
-            options = weekdays,
-            onOptionSelected = { day -> selectedWeekday = weekdays.indexOf(day) + 1 }
-        )
-        OutlinedTextField(
-            value = simulatedTime,
-            onValueChange = { simulatedTime = it },
-            label = { Text("模拟时间 HH:mm") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            TextButton(
-                onClick = {
-                    scope.launch {
-                        val suggestion = CourseReminderScheduler.suggestTestTime(context)
-                        if (suggestion == null) {
-                            resultText = "本周没有可测试课程，或周数尚未核验"
-                        } else {
-                            selectedWeekday = suggestion.first
-                            simulatedTime = suggestion.second.format(DateTimeFormatter.ofPattern("HH:mm"))
-                            resultText = ""
-                        }
-                    }
-                },
-                modifier = Modifier.weight(1f)
-            ) { Text("填入课程时间") }
-            Button(
-                onClick = {
-                    val time = runCatching {
-                        LocalTime.parse(simulatedTime, DateTimeFormatter.ofPattern("H:mm"))
-                    }.getOrNull()
-                    if (time == null) {
-                        resultText = "请输入有效时间，例如 07:50"
-                    } else {
-                        scope.launch {
-                            val outcome = CourseReminderScheduler.sendTestNotification(
-                                context, selectedWeekday, time
-                            )
-                            resultText = when (outcome.result) {
-                                CourseReminderScheduler.TestResult.SENT -> "已发送 ${outcome.count} 条测试通知"
-                                CourseReminderScheduler.TestResult.REMINDER_DISABLED -> "请先开启课前通知"
-                                CourseReminderScheduler.TestResult.NOTIFICATION_PERMISSION_REQUIRED -> "请先允许系统通知"
-                                CourseReminderScheduler.TestResult.WEEK_NOT_VERIFIED -> "本周周数尚未联网核验"
-                                CourseReminderScheduler.TestResult.NO_MATCHING_COURSE -> "这个时段没有待提醒课程"
-                                CourseReminderScheduler.TestResult.NOT_DEBUG_BUILD -> "此入口只在 Debug 版本可用"
-                            }
-                        }
-                    }
-                },
-                modifier = Modifier.weight(1f)
-            ) { Text("模拟发送") }
-        }
-        if (resultText.isNotEmpty()) {
-            Text(
-                text = resultText,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Text(
-            text = "当前提前 ${leadMinutes} 分钟",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }
 
