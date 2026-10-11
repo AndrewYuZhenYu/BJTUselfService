@@ -1,7 +1,13 @@
 package team.bjtuss.bjtuselfservice.screen
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.clickable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -18,11 +24,18 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -31,32 +44,38 @@ import sv.lib.squircleshape.CornerSmoothing
 import sv.lib.squircleshape.SquircleShape
 import team.bjtuss.bjtuselfservice.R
 import team.bjtuss.bjtuselfservice.RouteManager
+import team.bjtuss.bjtuselfservice.component.elasticOverscroll
+import team.bjtuss.bjtuselfservice.component.appLaunchBounds
+import androidx.lifecycle.Lifecycle
 
 
 @Composable
-fun SpaceScreen(navController: NavController) {
+fun SpaceScreen(navController: NavController, enableLaunchMotion: Boolean = true) {
 
     LazyVerticalGrid(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().elasticOverscroll(),
         columns = GridCells.Adaptive(140.dp),
         contentPadding = PaddingValues(
             top = 10.dp,
-            bottom = 32.dp,
+            bottom = 112.dp,
             start = 10.dp,
             end = 10.dp
         ),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        items(spaces.size) { index ->
+        items(spaces.size, key = { spaces[it].route }) { index ->
             val space = spaces[index]
             SpaceCard(
                 title = space.title,
                 image = space.image,
                 icon = space.icon,
+                modifier = if (enableLaunchMotion) Modifier.appLaunchBounds(space.route) else Modifier,
                 backgroundColor = MaterialTheme.colorScheme.primary
             ) {
-                navController.navigate(space.route)
+                if (navController.currentBackStackEntry?.lifecycle?.currentState == Lifecycle.State.RESUMED) {
+                    navController.navigate(space.route) { launchSingleTop = true }
+                }
             }
         }
     }
@@ -70,12 +89,46 @@ fun SpaceCard(
     backgroundColor: Color,
     modifier: Modifier = Modifier,
     contentModifier: Modifier = Modifier,
+    opening: Boolean = false,
     onClick: () -> Unit = {}
 ) {
     val hasBackground = team.bjtuss.bjtuselfservice.LocalHasBackground.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    var touching by remember { mutableStateOf(false) }
+    val held = touching || pressed || opening
+    val pressScale = animateFloatAsState(
+        targetValue = if (held) 0.95f else 1f,
+        animationSpec = tween(if (held) 160 else 260, easing = FastOutSlowInEasing),
+        label = "appCardPress"
+    )
 
     Card(
-        modifier = modifier,
+        onClick = onClick,
+        interactionSource = interactionSource,
+        modifier = modifier
+            .pointerInput(Unit) {
+                // Observe immediately without consuming events needed by the grid or Card.
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    touching = true
+                    try {
+                        do {
+                            val event = awaitPointerEvent(PointerEventPass.Final)
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed || change.isConsumed ||
+                                (change.position - down.position).getDistance() > viewConfiguration.touchSlop
+                            ) break
+                        } while (true)
+                    } finally {
+                        touching = false
+                    }
+                }
+            }
+            .graphicsLayer {
+                scaleX = pressScale.value
+                scaleY = pressScale.value
+            },
         shape = SquircleShape(
             48.dp,
             CornerSmoothing.Medium
@@ -92,7 +145,6 @@ fun SpaceCard(
     ) {
         Column(
             contentModifier
-                .clickable { onClick() }
                 .aspectRatio(1.0f)
                 .padding(18.dp),
             verticalArrangement = Arrangement.SpaceBetween

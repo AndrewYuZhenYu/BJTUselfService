@@ -1,5 +1,7 @@
 package team.bjtuss.bjtuselfservice.screen
 
+import team.bjtuss.bjtuselfservice.component.elasticOverscroll
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -120,7 +122,7 @@ fun ExamScheduleList(
                 }
             }
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().elasticOverscroll(),
                 contentPadding = PaddingValues(bottom = 16.dp)
             ) {
                 val filteredExamList = examList.filter {

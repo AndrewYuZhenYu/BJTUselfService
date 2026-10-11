@@ -1,5 +1,7 @@
 package team.bjtuss.bjtuselfservice.screen
 
+import team.bjtuss.bjtuselfservice.component.elasticOverscroll
+
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -21,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -160,8 +163,8 @@ fun HomeScreen(navController: NavController, mainViewModel: MainViewModel) {
 
     SwipeRefresh(state = refreshState, onRefresh = handleRefresh, modifier = Modifier.fillMaxSize()) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp),
+            modifier = Modifier.fillMaxSize().elasticOverscroll(allowStart = false),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 112.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             item {
@@ -323,35 +326,43 @@ private fun HomeNotificationShortcuts(
     ) {
         NotificationShortcut(
             label = "邮件", count = mailCount, icon = Icons.Default.Email,
-            background = MaterialTheme.colorScheme.primaryContainer,
-            foreground = MaterialTheme.colorScheme.onPrimaryContainer,
             onClick = onMailClick,
             modifier = Modifier.weight(1f)
         )
         NotificationShortcut(
             label = "成绩", count = gradeCount,
             imageRes = R.drawable.grade_report_icon,
-            background = MaterialTheme.colorScheme.tertiaryContainer,
-            foreground = MaterialTheme.colorScheme.onTertiaryContainer,
             onClick = onGradeClick,
             modifier = Modifier.weight(1f)
         )
         NotificationShortcut(
             label = "作业", count = homeworkCount, icon = Icons.Default.Edit,
-            background = MaterialTheme.colorScheme.secondaryContainer,
-            foreground = MaterialTheme.colorScheme.onSecondaryContainer,
             onClick = onHomeworkClick,
             modifier = Modifier.weight(1f)
         )
     }
 }
 
+// Clip only the paper silhouette in the supplied 1254px artwork, excluding its baked-in backdrop.
+private val GradePaperShape = GenericShape { size, _ ->
+    val x = size.width / 1254f
+    val y = size.height / 1254f
+    moveTo(433f * x, 340f * y)
+    lineTo(738f * x, 340f * y)
+    lineTo(870f * x, 474f * y)
+    lineTo(870f * x, 873f * y)
+    quadraticTo(870f * x, 914f * y, 829f * x, 914f * y)
+    lineTo(434f * x, 914f * y)
+    quadraticTo(394f * x, 914f * y, 394f * x, 873f * y)
+    lineTo(394f * x, 381f * y)
+    quadraticTo(394f * x, 340f * y, 433f * x, 340f * y)
+    close()
+}
+
 @Composable
 private fun NotificationShortcut(
     label: String,
     count: Int,
-    background: Color,
-    foreground: Color,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
@@ -364,14 +375,14 @@ private fun NotificationShortcut(
                     .size(72.dp)
                     .align(Alignment.BottomCenter)
                     .clip(CircleShape)
-                    .background(background),
+                    .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center
             ) {
                 if (imageRes != null) {
                     Image(
                         painter = painterResource(imageRes),
                         contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxSize().clip(GradePaperShape),
                         contentScale = ContentScale.Fit
                     )
                 } else if (icon != null) {
@@ -379,7 +390,7 @@ private fun NotificationShortcut(
                         icon,
                         contentDescription = null,
                         modifier = Modifier.size(30.dp),
-                        tint = foreground
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
             }

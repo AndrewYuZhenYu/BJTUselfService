@@ -1,5 +1,13 @@
 package team.bjtuss.bjtuselfservice.screen
 
+import team.bjtuss.bjtuselfservice.component.elasticOverscroll
+import team.bjtuss.bjtuselfservice.component.PageLoadingPlaceholder
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -137,11 +145,16 @@ fun RoomOccupancyScreen(mainViewModel: MainViewModel, onBack: () -> Unit) {
             )
         }
     ) { insets ->
-        when (val currentState = state) {
+        AnimatedContent(
+            targetState = state,
+            modifier = Modifier.fillMaxSize(),
+            contentKey = { it::class },
+            transitionSpec = { fadeIn(tween(240)) togetherWith fadeOut(tween(120)) },
+            label = "roomLoading"
+        ) { currentState ->
+         when (currentState) {
             RoomOccupancyState.Idle, RoomOccupancyState.Loading -> {
-                Box(Modifier.fillMaxSize().padding(insets), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
+                PageLoadingPlaceholder(Modifier.padding(insets))
             }
             is RoomOccupancyState.Failed -> {
                 Column(
@@ -307,7 +320,7 @@ fun RoomOccupancyScreen(mainViewModel: MainViewModel, onBack: () -> Unit) {
                     }
 
                     LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxSize().elasticOverscroll(),
                         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp)
                     ) {
                         item { OccupancyHeader() }
@@ -334,6 +347,7 @@ fun RoomOccupancyScreen(mainViewModel: MainViewModel, onBack: () -> Unit) {
                     RoomOccupancyDialog(room, week, selectedDay) { selectedRoom = null }
                 }
             }
+         }
         }
     }
 

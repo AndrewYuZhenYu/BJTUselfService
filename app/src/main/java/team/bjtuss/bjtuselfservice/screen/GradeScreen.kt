@@ -1,5 +1,7 @@
 package team.bjtuss.bjtuselfservice.screen
 
+import team.bjtuss.bjtuselfservice.component.elasticOverscroll
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.AnimatedVisibility
@@ -492,7 +494,7 @@ fun GradeList(
                 }
 
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().elasticOverscroll(),
                     contentPadding = PaddingValues(bottom = 16.dp),
                     state = listState
                 ) {

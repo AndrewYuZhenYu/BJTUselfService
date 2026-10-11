@@ -9,11 +9,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -21,12 +23,12 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,8 +38,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerDefaults
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BorderAll
 import androidx.compose.material.icons.filled.Home
@@ -47,15 +56,15 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -69,6 +78,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavBackStackEntry
@@ -80,7 +97,13 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import dev.jeziellago.compose.markdowntext.MarkdownText
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 import team.bjtuss.bjtuselfservice.MainApplication.Companion.appContext
+import team.bjtuss.bjtuselfservice.component.elasticOverscroll
+import team.bjtuss.bjtuselfservice.component.AppDestination
+import team.bjtuss.bjtuselfservice.component.LocalAppTransition
+import team.bjtuss.bjtuselfservice.component.LocalAppVisibility
+import team.bjtuss.bjtuselfservice.component.APP_LAUNCH_DURATION
 import team.bjtuss.bjtuselfservice.notification.CourseReminderScheduler
 import team.bjtuss.bjtuselfservice.RouteManager.ClassroomDetection
 import team.bjtuss.bjtuselfservice.repository.fetchLatestRelease
@@ -118,6 +141,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.abs
 
 
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -126,13 +150,12 @@ import dev.chrisbanes.haze.hazeChild
 import dev.chrisbanes.haze.HazeStyle
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 
 val LocalHasBackground = androidx.compose.runtime.compositionLocalOf { false }
-val LocalHazeState = androidx.compose.runtime.compositionLocalOf<dev.chrisbanes.haze.HazeState?> { null }
 
 class MainActivity : ComponentActivity() {
     private var reminderNavigationRequest by mutableIntStateOf(0)
@@ -178,10 +201,8 @@ class MainActivity : ComponentActivity() {
             val backgroundImageUri by settingViewModel.backgroundImageUri.collectAsState()
 
             AppTheme(currentTheme = currentTheme, dynamicColor = dynamicColorEnable) {
-                val hazeState = remember { dev.chrisbanes.haze.HazeState() }
                 androidx.compose.runtime.CompositionLocalProvider(
-                    LocalHasBackground provides backgroundImageUri.isNotEmpty(),
-                    LocalHazeState provides hazeState
+                    LocalHasBackground provides backgroundImageUri.isNotEmpty()
                 ) {
                     Box(modifier = Modifier.fillMaxSize()) {
                     val bitmap = remember(backgroundImageUri) {
@@ -193,7 +214,7 @@ class MainActivity : ComponentActivity() {
                         androidx.compose.foundation.Image(
                             bitmap = bitmap,
                             contentDescription = "Background",
-                            modifier = Modifier.fillMaxSize().haze(hazeState),
+                            modifier = Modifier.fillMaxSize(),
                             contentScale = androidx.compose.ui.layout.ContentScale.Crop
                         )
                     }
@@ -314,6 +335,7 @@ fun CheckUpdate() {
 }
 
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun App(
     mainViewModel: MainViewModel,
@@ -330,51 +352,63 @@ fun App(
             }
         }
     }
-    NavHost(navController = navController,
-        startDestination = RouteManager.Navigation,
-        enterTransition = { activityEnterTransition() },
-        exitTransition = { activityExitTransition() },
-        popEnterTransition = { activityPopEnterTransition() },
-        popExitTransition = { activityPopExitTransition() }) {
-        composable(RouteManager.Navigation) {
-            AppNavigation(navController, mainViewModel, hasBackground)
-        }
-        composable(RouteManager.CourseSchedule) {
-            CourseScheduleScreen(mainViewModel)
-        }
-        composable(RouteManager.RoomOccupancy) {
-            RoomOccupancyScreen(mainViewModel, onBack = { navController.popBackStack() })
-        }
-        composable(RouteManager.ExamSchedule) {
-            ExamScheduleScreen(mainViewModel)
-        }
-        composable(RouteManager.Building) {
-            BuildingScreen(navController)
-        }
-        composable(
-            route = ClassroomDetection,
-            arguments = listOf(navArgument("buildingName") { type = NavType.StringType })
-        ) {
-            val buildingName = it.arguments?.getString("buildingName") ?: ""
-            ClassroomScreen(buildingName = buildingName, mainViewModel)
-        }
-        composable(RouteManager.Grade) {
-            GradeScreen(mainViewModel)
-        }
-        composable(RouteManager.Email) {
-            EmailScreen()
-        }
-        composable(RouteManager.HomeWork) {
-            HomeworkScreen(mainViewModel)
-        }
-        composable(RouteManager.OtherFunction) {
-            OtherFunctionScreen(onCalendarClick = { navController.navigate(RouteManager.SchoolCalendar) })
-        }
-        composable(RouteManager.SchoolCalendar) {
-            SchoolCalendarScreen(onBack = { navController.popBackStack() })
-        }
-        composable(RouteManager.Courseware) {
-            CoursewareScreen(mainViewModel)
+    SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
+        CompositionLocalProvider(LocalAppTransition provides this) {
+            NavHost(navController = navController,
+                startDestination = RouteManager.Navigation,
+                enterTransition = { activityEnterTransition() },
+                exitTransition = { activityExitTransition() },
+                popEnterTransition = { activityPopEnterTransition() },
+                popExitTransition = { activityPopExitTransition() }) {
+                composable(RouteManager.Navigation) {
+                    CompositionLocalProvider(LocalAppVisibility provides this) {
+                        AppNavigation(navController, mainViewModel, hasBackground)
+                    }
+                }
+                composable(RouteManager.CourseSchedule) {
+                    AppDestination(RouteManager.CourseSchedule, this) { CourseScheduleScreen(mainViewModel) }
+                }
+                composable(RouteManager.RoomOccupancy) {
+                    AppDestination(RouteManager.RoomOccupancy, this) {
+                        RoomOccupancyScreen(mainViewModel, onBack = { navController.popBackStack() })
+                    }
+                }
+                composable(RouteManager.ExamSchedule) {
+                    AppDestination(RouteManager.ExamSchedule, this) { ExamScheduleScreen(mainViewModel) }
+                }
+                composable(RouteManager.Building) {
+                    AppDestination(RouteManager.Building, this) { BuildingScreen(navController) }
+                }
+                composable(
+                    route = ClassroomDetection,
+                    arguments = listOf(navArgument("buildingName") { type = NavType.StringType })
+                ) {
+                    val buildingName = it.arguments?.getString("buildingName") ?: ""
+                    ClassroomScreen(buildingName = buildingName, mainViewModel)
+                }
+                composable(RouteManager.Grade) {
+                    AppDestination(RouteManager.Grade, this) { GradeScreen(mainViewModel) }
+                }
+                composable(RouteManager.Email) {
+                    AppDestination(RouteManager.Email, this) { EmailScreen() }
+                }
+                composable(RouteManager.HomeWork) {
+                    AppDestination(RouteManager.HomeWork, this) { HomeworkScreen(mainViewModel) }
+                }
+                composable(RouteManager.OtherFunction) {
+                    AppDestination(RouteManager.OtherFunction, this) {
+                        OtherFunctionScreen(onCalendarClick = { navController.navigate(RouteManager.SchoolCalendar) })
+                    }
+                }
+                composable(RouteManager.SchoolCalendar) {
+                    AppDestination(RouteManager.SchoolCalendar, this) {
+                        SchoolCalendarScreen(onBack = { navController.popBackStack() })
+                    }
+                }
+                composable(RouteManager.Courseware) {
+                    AppDestination(RouteManager.Courseware, this) { CoursewareScreen(mainViewModel) }
+                }
+            }
         }
     }
 
@@ -479,158 +513,237 @@ object RouteManager {
 fun AppNavigation(
     navController: NavController, mainViewModel: MainViewModel, hasBackground: Boolean = false
 ) {
-    val pages = listOf(
-        PageItem(RouteManager.Home, "首页", Icons.Default.Home),
-        PageItem(RouteManager.Space, "应用", Icons.Default.BorderAll),
-        PageItem(RouteManager.Setting, "设置", Icons.Default.Settings)
-    )
-
+    val pages = remember {
+        listOf(
+            PageItem(RouteManager.Home, "首页", Icons.Default.Home),
+            PageItem(RouteManager.Space, "应用", Icons.Default.BorderAll),
+            PageItem(RouteManager.Setting, "设置", Icons.Default.Settings)
+        )
+    }
     val pagerState = rememberPagerState(pageCount = { pages.size })
-
-
     val clickSequence = remember { mutableStateListOf<Int>() }
-    val answer = listOf(1, 2, 2, 0, 1, 1)
-    var targetPage by remember { mutableIntStateOf(pagerState.currentPage) }
+    val answer = remember { listOf(1, 2, 2, 0, 1, 1) }
     val coroutineScope = rememberCoroutineScope()
-    Scaffold(
-        containerColor = if (hasBackground) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.background,
-        bottomBar = {
+    var pageAnimation by remember { mutableStateOf<Job?>(null) }
+    val navigationHazeState = remember { dev.chrisbanes.haze.HazeState() }
 
-        androidx.compose.foundation.layout.Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 24.dp, start = 24.dp, end = 24.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            pages.forEachIndexed { index, pageItem ->
-                val isSelected = targetPage == index
-                Box(
-                    modifier = Modifier
-                        .size(72.dp)
-                        .let { 
-                            if (hasBackground && LocalHazeState.current != null)
-                                it.hazeChild(LocalHazeState.current!!, shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp), style = HazeStyle(tint = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.05f), blurRadius = 8.dp))
-                            else it 
-                        }
-                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
-                        .background(
-                            if (hasBackground) androidx.compose.ui.graphics.Color.Transparent 
-                            else if (isSelected) MaterialTheme.colorScheme.secondaryContainer 
-                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    Scaffold(
+        containerColor = if (hasBackground) Color.Transparent else MaterialTheme.colorScheme.background,
+    ) { paddingValues ->
+        Box(Modifier.fillMaxSize().padding(paddingValues)) {
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize()
+                    .haze(navigationHazeState)
+                    .elasticOverscroll(orientation = Orientation.Horizontal),
+                // Keep the three small root screens composed, including their scroll positions.
+                beyondViewportPageCount = pages.lastIndex,
+                key = { pages[it].route },
+                userScrollEnabled = true,
+                flingBehavior = PagerDefaults.flingBehavior(
+                    state = pagerState,
+                    snapAnimationSpec = spring(dampingRatio = 0.95f, stiffness = 280f)
+                )
+            ) { page ->
+                Box(Modifier.fillMaxSize().graphicsLayer {
+                    val distance = abs(pagerState.currentPage + pagerState.currentPageOffsetFraction - page)
+                        .coerceIn(0f, 1f)
+                    scaleX = 1f - distance * 0.018f
+                    scaleY = scaleX
+                }) {
+                    when (page) {
+                        0 -> HomeScreen(navController = navController, mainViewModel = mainViewModel)
+                        1 -> SpaceScreen(
+                            navController = navController,
+                            enableLaunchMotion = pagerState.settledPage == 1
                         )
-                        .border(
-                            width = 1.dp,
-                            color = if (hasBackground) androidx.compose.ui.graphics.Color.White.copy(alpha = 0.5f) else androidx.compose.ui.graphics.Color.Transparent,
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
-                        )
-                        .clickable {
-                            targetPage = index
-                            clickSequence.add(index)
-                            if (clickSequence.size > answer.size) {
-                                clickSequence.removeAt(0)
-                            }
-                            if (clickSequence.toList() == answer) {
-                                ClassroomCapacityService.ok = true
-                            }
-                            coroutineScope.launch {
-                                pagerState.animateScrollToPage(
-                                    index,
-                                    animationSpec = tween(
-                                        durationMillis = 350,
-                                        easing = LinearOutSlowInEasing
-                                    )
+                        2 -> SettingScreen(mainViewModel = mainViewModel)
+                    }
+                }
+            }
+
+            Box(Modifier.align(Alignment.BottomCenter)) {
+                ContinuousNavigationBar(pages, pagerState, navigationHazeState) { index ->
+                    clickSequence.add(index)
+                    if (clickSequence.size > answer.size) clickSequence.removeAt(0)
+                    if (clickSequence.toList() == answer) ClassroomCapacityService.ok = true
+
+                    if (pagerState.targetPage != index || !pagerState.isScrollInProgress) {
+                        pageAnimation?.cancel()
+                        pageAnimation = coroutineScope.launch {
+                            pagerState.animateScrollToPage(
+                                index,
+                                animationSpec = tween(
+                                    durationMillis = PAGE_TRANSITION_DURATION,
+                                    easing = PageTransitionEasing
                                 )
-                            }
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = pageItem.icon, 
-                            contentDescription = pageItem.title,
-                            tint = if (hasBackground) {
-                                if (isSelected) androidx.compose.ui.graphics.Color.White else androidx.compose.ui.graphics.Color.White.copy(alpha = 0.6f)
-                            } else {
-                                if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-                            }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ContinuousNavigationBar(
+    pages: List<PageItem>,
+    pagerState: PagerState,
+    hazeState: dev.chrisbanes.haze.HazeState,
+    onSelect: (Int) -> Unit,
+) {
+    val selectedPage by remember(pagerState) { derivedStateOf { pagerState.targetPage } }
+    val shape = CircleShape
+    val darkGlass = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val glassTint = MaterialTheme.colorScheme.surface.copy(alpha = if (darkGlass) 0.23f else 0.18f)
+    val glassEdge = Brush.verticalGradient(
+        listOf(
+            Color.White.copy(alpha = if (darkGlass) 0.42f else 0.88f),
+            Color.White.copy(alpha = if (darkGlass) 0.10f else 0.30f),
+            MaterialTheme.colorScheme.outline.copy(alpha = 0.20f)
+        )
+    )
+    val selectionGlass = Brush.verticalGradient(
+        listOf(
+            Color.White.copy(alpha = if (darkGlass) 0.20f else 0.56f),
+            Color.White.copy(alpha = if (darkGlass) 0.10f else 0.32f)
+        )
+    )
+    val direction = if (androidx.compose.ui.platform.LocalLayoutDirection.current ==
+        androidx.compose.ui.unit.LayoutDirection.Rtl) -1f else 1f
+
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 18.dp, start = 20.dp, end = 20.dp)
+            .height(68.dp)
+            .shadow(10.dp, shape)
+            .clip(shape)
+            .hazeChild(
+                hazeState,
+                shape = shape,
+                style = HazeStyle(tint = glassTint, blurRadius = 16.dp)
+            )
+            .border(1.dp, glassEdge, shape)
+            .selectableGroup()
+    ) {
+        val cellWidth = maxWidth / pages.size
+        val selectionWidth = cellWidth - 8.dp
+
+        Box(
+            Modifier.align(Alignment.CenterStart)
+                .padding(start = 4.dp)
+                .width(selectionWidth)
+                .height(60.dp)
+                .graphicsLayer {
+                    val position = (pagerState.currentPage + pagerState.currentPageOffsetFraction)
+                        .coerceIn(0f, pages.lastIndex.toFloat())
+                    val stretch = (abs(pagerState.currentPageOffsetFraction) * 2f)
+                        .coerceIn(0f, 1f)
+                    translationX = direction * cellWidth.toPx() * position
+                    scaleX = 1f + 0.06f * stretch
+                    scaleY = 1f - 0.025f * stretch
+                }
+                .shadow(4.dp, shape)
+                .clip(shape)
+                .background(selectionGlass, shape)
+                .border(1.dp, glassEdge, shape)
+        )
+
+        Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+            pages.forEachIndexed { index, page ->
+                val interactionSource = remember { MutableInteractionSource() }
+                val selectionFraction = {
+                    (1f - abs(pagerState.currentPage + pagerState.currentPageOffsetFraction - index))
+                        .coerceIn(0f, 1f)
+                }
+                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    Box(
+                        Modifier.fillMaxWidth().height(68.dp)
+                            .clip(shape)
+                            .selectable(
+                                selected = selectedPage == index,
+                                interactionSource = interactionSource,
+                                indication = LocalIndication.current,
+                                role = Role.Tab,
+                                onClick = { onSelect(index) }
+                            )
+                            .semantics { contentDescription = page.title },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        NavigationItemContent(
+                            page,
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                            Modifier.graphicsLayer { alpha = 1f - selectionFraction() }
                         )
-                        androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = pageItem.title, 
-                            fontSize = 10.sp,
-                            fontWeight = if (isSelected) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal,
-                            color = if (hasBackground) {
-                                if (isSelected) androidx.compose.ui.graphics.Color.White else androidx.compose.ui.graphics.Color.White.copy(alpha = 0.6f)
-                            } else {
-                                if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-                            }
+                        NavigationItemContent(
+                            page,
+                            MaterialTheme.colorScheme.onSurface,
+                            Modifier.graphicsLayer { alpha = selectionFraction() }
                         )
                     }
                 }
             }
         }
-
-    },
-
-
-        content = { paddingValues ->
-
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(paddingValues),
-                userScrollEnabled = false
-            ) { page ->
-                when (page) {
-                    0 -> {
-                        HomeScreen(
-                            navController = navController, mainViewModel = mainViewModel
-                        )
-                    }
-
-                    1 -> {
-                        SpaceScreen(navController = navController)
-                    }
-
-                    2 -> {
-                        SettingScreen(mainViewModel = mainViewModel)
-                    }
-                }
-            }
-        })
-
-
+    }
 }
 
+@Composable
+private fun NavigationItemContent(page: PageItem, tint: Color, modifier: Modifier) {
+    Column(
+        modifier = modifier.clearAndSetSemantics { },
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(page.icon, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
+        androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(2.dp))
+        Text(page.title, fontSize = 10.sp, fontWeight = FontWeight.Medium, color = tint)
+    }
+}
 
-private const val DEFAULT_ENTER_DURATION = 300
-private const val DEFAULT_EXIT_DURATION = 220
+private const val PAGE_TRANSITION_DURATION = 420
+private val PageTransitionEasing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.activityEnterTransition(): EnterTransition {
-    return slideIntoContainer(towards = AnimatedContentTransitionScope.SlideDirection.Start,
-        animationSpec = tween(DEFAULT_ENTER_DURATION, easing = LinearOutSlowInEasing),
-        initialOffset = { it })
-}
-
-@Suppress("UnusedReceiverParameter")
-private fun AnimatedContentTransitionScope<NavBackStackEntry>.activityExitTransition(): ExitTransition {
-    return scaleOut(
-        animationSpec = tween(DEFAULT_ENTER_DURATION), targetScale = 1F
+    if (initialState.destination.route == RouteManager.Navigation) {
+        return fadeIn(tween(APP_LAUNCH_DURATION), initialAlpha = 0.98f)
+    }
+    return slideIntoContainer(
+        towards = AnimatedContentTransitionScope.SlideDirection.Start,
+        animationSpec = tween(PAGE_TRANSITION_DURATION, easing = PageTransitionEasing),
+        initialOffset = { it }
     )
 }
 
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.activityExitTransition(): ExitTransition {
+    if (initialState.destination.route == RouteManager.Navigation) {
+        return fadeOut(tween(APP_LAUNCH_DURATION), targetAlpha = 0.98f)
+    }
+    return slideOutOfContainer(
+        towards = AnimatedContentTransitionScope.SlideDirection.Start,
+        animationSpec = tween(PAGE_TRANSITION_DURATION, easing = PageTransitionEasing),
+        targetOffset = { it / 4 }
+    )
+}
 
-@Suppress("UnusedReceiverParameter")
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.activityPopEnterTransition(): EnterTransition {
-    return scaleIn(
-        animationSpec = tween(DEFAULT_EXIT_DURATION), initialScale = 1F
+    if (targetState.destination.route == RouteManager.Navigation) {
+        return fadeIn(tween(APP_LAUNCH_DURATION), initialAlpha = 0.98f)
+    }
+    return slideIntoContainer(
+        towards = AnimatedContentTransitionScope.SlideDirection.End,
+        animationSpec = tween(PAGE_TRANSITION_DURATION, easing = PageTransitionEasing),
+        initialOffset = { it / 4 }
     )
 }
 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.activityPopExitTransition(): ExitTransition {
-    return slideOutOfContainer(towards = AnimatedContentTransitionScope.SlideDirection.End,
-        animationSpec = tween(DEFAULT_EXIT_DURATION, easing = FastOutLinearInEasing),
-        targetOffset = { it })
+    if (targetState.destination.route == RouteManager.Navigation) {
+        return fadeOut(tween(APP_LAUNCH_DURATION), targetAlpha = 0.98f)
+    }
+    return slideOutOfContainer(
+        towards = AnimatedContentTransitionScope.SlideDirection.End,
+        animationSpec = tween(PAGE_TRANSITION_DURATION, easing = PageTransitionEasing),
+        targetOffset = { it }
+    )
 }

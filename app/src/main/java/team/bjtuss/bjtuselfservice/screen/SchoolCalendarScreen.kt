@@ -1,5 +1,8 @@
 package team.bjtuss.bjtuselfservice.screen
 
+import team.bjtuss.bjtuselfservice.component.elasticOverscroll
+import team.bjtuss.bjtuselfservice.component.PageLoadingPlaceholder
+
 import android.content.Context
 import android.print.PrintAttributes
 import android.print.PrintManager
@@ -120,9 +123,7 @@ fun SchoolCalendarScreen(onBack: () -> Unit) {
         }
     ) { insets ->
         when {
-            result == null -> Box(Modifier.fillMaxSize().padding(insets), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
+            result == null -> PageLoadingPlaceholder(Modifier.padding(insets))
             result?.isFailure == true -> Column(
                 modifier = Modifier.fillMaxSize().padding(insets).padding(24.dp),
                 verticalArrangement = Arrangement.Center,
@@ -133,7 +134,7 @@ fun SchoolCalendarScreen(onBack: () -> Unit) {
             }
             semester != null -> LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize().padding(insets),
+                modifier = Modifier.fillMaxSize().padding(insets).elasticOverscroll(),
                 contentPadding = PaddingValues(bottom = 28.dp)
             ) {
                 item {

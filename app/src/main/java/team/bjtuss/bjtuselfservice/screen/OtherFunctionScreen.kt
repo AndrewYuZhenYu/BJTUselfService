@@ -1,5 +1,7 @@
 package team.bjtuss.bjtuselfservice.screen
 
+import team.bjtuss.bjtuselfservice.component.elasticOverscroll
+
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -112,6 +114,7 @@ fun OtherFunctionScreen(onCalendarClick: () -> Unit) {
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
+                    .elasticOverscroll()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {

@@ -1,5 +1,7 @@
 package team.bjtuss.bjtuselfservice.screen
 
+import team.bjtuss.bjtuselfservice.component.elasticOverscroll
+
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -158,8 +160,9 @@ fun SettingScreen(mainViewModel: MainViewModel) {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
+            .elasticOverscroll()
             .padding(horizontal = 16.dp, vertical = 8.dp),
-        contentPadding = PaddingValues(bottom = 24.dp),
+        contentPadding = PaddingValues(bottom = 112.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {

@@ -1,6 +1,9 @@
 package team.bjtuss.bjtuselfservice.screen
 
+import team.bjtuss.bjtuselfservice.component.elasticOverscroll
+
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,6 +24,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -49,6 +54,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -74,6 +80,7 @@ import team.bjtuss.bjtuselfservice.utils.Utils
 import team.bjtuss.bjtuselfservice.utils.compactCoursePlace
 import team.bjtuss.bjtuselfservice.viewmodel.DataChange
 import team.bjtuss.bjtuselfservice.viewmodel.MainViewModel
+import kotlinx.coroutines.launch
 
 private val CourseTimeColumnWidth = 48.dp
 private val CourseRowMinHeight = 92.dp
@@ -141,14 +148,19 @@ fun CourseScheduleScreen(
     )
 
     var currentTerm by rememberSaveable { mutableStateOf(false) }
-    val allWeeks = listOf("全部") + (1..26).map { "第${it}周" }
     var showWeekSelector by rememberSaveable { mutableStateOf(false) }
     val classroomMap by classroomViewModel.classroomMap.collectAsState()
     val currentWeek = storedCurrentWeek.takeIf { it > 0 }
         ?: classroomMap["nowWeek"]?.firstOrNull()
         ?: 0
-    var selectedWeek by rememberSaveable { mutableIntStateOf(0) }
+    val weekCount = maxOf(26, currentWeek)
+    val allWeeks = listOf("全部") + (1..weekCount).map { "第${it}周" }
+    val weekPagerState = rememberPagerState(pageCount = { weekCount + 1 })
+    val coroutineScope = rememberCoroutineScope()
+    var overviewWeek by rememberSaveable { mutableIntStateOf(0) }
+    val selectedWeek = if (currentTerm) overviewWeek else weekPagerState.currentPage
     var shouldFollowCurrentWeek by rememberSaveable { mutableStateOf(true) }
+    val isDraggingWeek by weekPagerState.interactionSource.collectIsDraggedAsState()
     val courseList by
         if (currentTerm) {
             courseScheduleViewModel.currentTermCourseList.collectAsState()
@@ -158,17 +170,21 @@ fun CourseScheduleScreen(
 
     LaunchedEffect(currentTerm, currentWeek, shouldFollowCurrentWeek) {
         if (!currentTerm && shouldFollowCurrentWeek && currentWeek != 0) {
-            selectedWeek = currentWeek
+            weekPagerState.scrollToPage(currentWeek)
             shouldFollowCurrentWeek = false
         }
     }
 
+    LaunchedEffect(isDraggingWeek) {
+        if (isDraggingWeek) shouldFollowCurrentWeek = false
+    }
+
     fun selectSchedule(showCourseSelectionSchedule: Boolean) {
         currentTerm = showCourseSelectionSchedule
-        selectedWeek = if (!showCourseSelectionSchedule) {
-            currentWeek
+        if (showCourseSelectionSchedule) {
+            overviewWeek = 0
         } else {
-            0
+            coroutineScope.launch { weekPagerState.scrollToPage(currentWeek) }
         }
         shouldFollowCurrentWeek = !showCourseSelectionSchedule && currentWeek == 0
     }
@@ -177,13 +193,32 @@ fun CourseScheduleScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text(text = "课程表")
-                        Text(
-                            text = "${if (!currentTerm) "本周" else "总览"} · ${selectedWeekLabel(selectedWeek)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(text = "课程表")
+                            Text(
+                                text = "${if (!currentTerm) "本周" else "总览"} · ${selectedWeekLabel(selectedWeek)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (!currentTerm) {
+                            Text(
+                                text = "当前显示${selectedWeekLabel(selectedWeek)}",
+                                modifier = Modifier.padding(end = 16.dp),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (currentWeek > 0 && selectedWeek != currentWeek) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                },
+                                maxLines = 1
+                            )
+                        }
                     }
                 }
             )
@@ -205,15 +240,29 @@ fun CourseScheduleScreen(
                 onWeekClick = { showWeekSelector = true }
             )
 
-            CourseScheduleContent(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                courseList = courseList,
-                weekDays = weekDays,
-                courseTimes = courseTimes,
-                selectedWeek = selectedWeek
-            )
+            if (currentTerm) {
+                CourseScheduleContent(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    courseList = courseList,
+                    weekDays = weekDays,
+                    courseTimes = courseTimes,
+                    selectedWeek = selectedWeek
+                )
+            } else {
+                HorizontalPager(
+                    state = weekPagerState,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    key = { it }
+                ) { week ->
+                    CourseScheduleContent(
+                        modifier = Modifier.fillMaxSize(),
+                        courseList = courseList,
+                        weekDays = weekDays,
+                        courseTimes = courseTimes,
+                        selectedWeek = week
+                    )
+                }
+            }
         }
     }
 
@@ -239,7 +288,13 @@ fun CourseScheduleScreen(
                                         }
                                     )
                                     .clickable {
-                                        selectedWeek = index
+                                        if (currentTerm) {
+                                            overviewWeek = index
+                                        } else {
+                                            coroutineScope.launch {
+                                                weekPagerState.animateScrollToPage(index)
+                                            }
+                                        }
                                         shouldFollowCurrentWeek = false
                                         showWeekSelector = false
                                     }
@@ -448,6 +503,7 @@ fun CourseScheduleContent(
             Row(
                 modifier = Modifier
                     .fillMaxSize()
+                    .elasticOverscroll()
                     .verticalScroll(rememberScrollState())
             ) {
                 Column(

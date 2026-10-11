@@ -1,5 +1,7 @@
 package team.bjtuss.bjtuselfservice.screen
 
+import team.bjtuss.bjtuselfservice.component.elasticOverscroll
+
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -297,7 +299,7 @@ fun HomeworkList(homeworkList: List<HomeworkEntity>) {
                     }
                 }
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().elasticOverscroll(),
                     contentPadding = PaddingValues(bottom = 16.dp),
                     state = listState
                 ) {

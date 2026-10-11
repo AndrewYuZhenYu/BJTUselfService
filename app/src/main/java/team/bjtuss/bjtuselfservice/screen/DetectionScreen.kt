@@ -1,5 +1,7 @@
 package team.bjtuss.bjtuselfservice.screen
 
+import team.bjtuss.bjtuselfservice.component.elasticOverscroll
+
 import android.annotation.SuppressLint
 import android.util.Log
 import android.view.ViewGroup
@@ -120,7 +122,7 @@ fun BuildingScreen(navController: NavController) {
                 }
             }
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().elasticOverscroll(),
                 contentPadding = PaddingValues(bottom = 16.dp)
             ) {
                 items(buildingList.size) { index ->
@@ -306,7 +308,7 @@ fun ClassroomScreen(
                     }
                 }
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().elasticOverscroll(),
                     contentPadding = PaddingValues(bottom = 16.dp)
                 ) {
 

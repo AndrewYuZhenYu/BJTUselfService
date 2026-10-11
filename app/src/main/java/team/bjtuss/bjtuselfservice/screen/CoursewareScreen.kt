@@ -1,5 +1,9 @@
 package team.bjtuss.bjtuselfservice.screen
 
+import team.bjtuss.bjtuselfservice.component.elasticOverscroll
+import team.bjtuss.bjtuselfservice.component.PageLoadingPlaceholder
+import androidx.compose.animation.Crossfade
+
 import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -131,9 +135,10 @@ fun CoursewareScreen(mainViewModel: MainViewModel) {
                 .padding(paddingValues),
             color = MaterialTheme.colorScheme.background
         ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                if (isLoading) {
-                    LoadingScreen()
+            Crossfade(targetState = isLoading, label = "coursewareLoading") { loading ->
+             Box(modifier = Modifier.fillMaxSize()) {
+                if (loading) {
+                    PageLoadingPlaceholder()
                 } else {
                     CoursewareTreeView(
                         coursewareRootNodeList = coursewareRootNodeList,
@@ -222,6 +227,7 @@ fun CoursewareScreen(mainViewModel: MainViewModel) {
                         )
                     }
                 }
+             }
             }
         }
     }
@@ -446,6 +452,7 @@ fun CoursewareTreeView(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .elasticOverscroll()
             .verticalScroll(scrollState)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
