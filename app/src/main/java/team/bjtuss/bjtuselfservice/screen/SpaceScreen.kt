@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -93,6 +94,8 @@ fun SpaceCard(
     onClick: () -> Unit = {}
 ) {
     val hasBackground = team.bjtuss.bjtuselfservice.LocalHasBackground.current
+    val colors = MaterialTheme.colorScheme
+    val isDark = colors.background.luminance() < 0.5f
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     var touching by remember { mutableStateOf(false) }
@@ -134,13 +137,20 @@ fun SpaceCard(
             CornerSmoothing.Medium
         ),
         elevation = CardDefaults.elevatedCardElevation(
-            if (hasBackground) 0.dp else 8.dp
+            if (hasBackground || isDark) 0.dp else 8.dp
         ),
-        border = if (hasBackground) androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)) else null,
+        border = when {
+            isDark -> androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant.copy(alpha = 0.55f))
+            hasBackground -> androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.5f))
+            else -> null
+        },
         colors = CardDefaults.elevatedCardColors(
-            containerColor = if (hasBackground) Color.Transparent else MaterialTheme.colorScheme.surfaceVariant
-                .copy(alpha = 0.1f)
-                .compositeOver(backgroundColor),
+            containerColor = when {
+                isDark && hasBackground -> colors.surfaceContainerHigh.copy(alpha = 0.9f)
+                isDark -> colors.surfaceContainerHigh
+                hasBackground -> Color.Transparent
+                else -> colors.surfaceVariant.copy(alpha = 0.1f).compositeOver(backgroundColor)
+            },
         )
     ) {
         Column(
@@ -152,7 +162,7 @@ fun SpaceCard(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleLarge.copy(
-                    color = Color.White,
+                    color = if (isDark) colors.onSurface else Color.White,
                     fontWeight = FontWeight.SemiBold
                 )
             )
@@ -160,7 +170,7 @@ fun SpaceCard(
                 Icon(
                     imageVector = icon,
                     contentDescription = title,
-                    tint = Color.White,
+                    tint = if (isDark) colors.onSurfaceVariant else Color.White,
                     modifier = Modifier.size(70.dp).align(Alignment.End)
                 )
             } else if (image != null) {

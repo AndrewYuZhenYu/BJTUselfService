@@ -9,7 +9,10 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,8 +43,6 @@ import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Update
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -61,7 +62,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
@@ -69,6 +74,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.LocalIndication
 import dev.jeziellago.compose.markdowntext.MarkdownText
 import kotlinx.coroutines.launch
 import team.bjtuss.bjtuselfservice.MainApplication.Companion.appContext
@@ -93,6 +102,7 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import team.bjtuss.bjtuselfservice.MainApplication
+import team.bjtuss.bjtuselfservice.LocalHasBackground
 import team.bjtuss.bjtuselfservice.notification.CourseReminderScheduler
 import java.io.File
 import java.io.FileOutputStream
@@ -435,24 +445,22 @@ fun SettingScreen(mainViewModel: MainViewModel) {
             )
         }
 
-        // Logout button
         item {
-//            Spacer(modifier = Modifier.height(8.dp))
-            Button(
+            SettingItemBase(
                 onClick = {
                     AppEventManager.sendEvent(AppEvent.LogoutRequest(clearAllData = {
                         AuthenticatorManager.clearAllData(
                             mainViewModel
                         )
                     }))
-                },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp)
+                }
             ) {
                 Text(
                     text = "退出账号",
-                    fontSize = 16.sp,
-                    modifier = Modifier.padding(vertical = 4.dp)
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
                 )
             }
         }
@@ -665,23 +673,65 @@ fun SettingItemBase(
     onClick: () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
-    ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .clickable { onClick() }
-                .padding(16.dp)
-        ) {
-            content()
+    val shape = RoundedCornerShape(20.dp)
+    val darkGlass = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val hasWallpaper = LocalHasBackground.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed) 0.985f else 1f,
+        animationSpec = spring(dampingRatio = 0.85f, stiffness = 550f),
+        label = "settingGlassPress"
+    )
+    val glassFill = Brush.verticalGradient(
+        if (hasWallpaper) {
+            listOf(
+                Color.White.copy(alpha = if (darkGlass) 0.14f else 0.20f),
+                Color.White.copy(alpha = if (darkGlass) 0.05f else 0.07f)
+            )
+        } else {
+            listOf(
+                Color.White.copy(alpha = if (darkGlass) 0.16f else 0.55f),
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (darkGlass) 0.14f else 0.22f)
+            )
         }
+    )
+    val glassEdge = Brush.verticalGradient(
+        listOf(
+            Color.White.copy(alpha = if (darkGlass) 0.38f else 0.82f),
+            MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)
+        )
+    )
+    Box(
+        modifier = modifier.fillMaxWidth()
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+                this.shape = shape
+                clip = true
+            }
+            .background(glassFill, shape)
+            .border(1.dp, glassEdge, shape)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                onClick = onClick
+            )
+            .drawWithContent {
+                drawContent()
+                val inset = 20.dp.toPx()
+                drawLine(
+                    brush = Brush.horizontalGradient(
+                        listOf(Color.Transparent, Color.White.copy(alpha = if (darkGlass) 0.25f else 0.48f), Color.Transparent)
+                    ),
+                    start = Offset(inset, 1.dp.toPx()),
+                    end = Offset(size.width - inset, 1.dp.toPx()),
+                    strokeWidth = 1.dp.toPx()
+                )
+            }
+            .padding(16.dp)
+    ) {
+        content()
     }
 }
 
