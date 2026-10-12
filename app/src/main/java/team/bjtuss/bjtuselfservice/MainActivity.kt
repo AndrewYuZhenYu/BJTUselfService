@@ -14,6 +14,7 @@ import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -103,7 +104,6 @@ import team.bjtuss.bjtuselfservice.component.elasticOverscroll
 import team.bjtuss.bjtuselfservice.component.AppDestination
 import team.bjtuss.bjtuselfservice.component.LocalAppTransition
 import team.bjtuss.bjtuselfservice.component.LocalAppVisibility
-import team.bjtuss.bjtuselfservice.component.APP_LAUNCH_DURATION
 import team.bjtuss.bjtuselfservice.notification.CourseReminderScheduler
 import team.bjtuss.bjtuselfservice.RouteManager.ClassroomDetection
 import team.bjtuss.bjtuselfservice.repository.fetchLatestRelease
@@ -197,7 +197,6 @@ class MainActivity : ComponentActivity() {
             val appState by AppStateManager.appState.collectAsState()
             val credentials by AuthenticatorManager.credentials.collectAsState()
             val currentTheme by mainViewModel.settingViewModel.currentTheme.collectAsState()
-            val checkUpdate by settingViewModel.checkUpdateEnable.collectAsState()
             val backgroundImageUri by settingViewModel.backgroundImageUri.collectAsState()
 
             AppTheme(currentTheme = currentTheme, dynamicColor = dynamicColorEnable) {
@@ -223,10 +222,6 @@ class MainActivity : ComponentActivity() {
                         color = if (bitmap != null) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.background,
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        if (checkUpdate) {
-                            CheckUpdate()
-                        }
-
                         if (appState == AppState.Logout || appState == AppState.Error) {
 
                             LoginDialog(credentials)
@@ -411,8 +406,6 @@ fun App(
             }
         }
     }
-
-
 }
 
 @Composable
@@ -703,10 +696,11 @@ private fun NavigationItemContent(page: PageItem, tint: Color, modifier: Modifie
 
 private const val PAGE_TRANSITION_DURATION = 420
 private val PageTransitionEasing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
+private const val APP_TRANSITION_DURATION = 300
 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.activityEnterTransition(): EnterTransition {
     if (initialState.destination.route == RouteManager.Navigation) {
-        return fadeIn(tween(APP_LAUNCH_DURATION), initialAlpha = 0.98f)
+        return fadeIn(tween(APP_TRANSITION_DURATION - 60, delayMillis = 60, easing = FastOutSlowInEasing))
     }
     return slideIntoContainer(
         towards = AnimatedContentTransitionScope.SlideDirection.Start,
@@ -717,7 +711,7 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.activityEnterTrans
 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.activityExitTransition(): ExitTransition {
     if (initialState.destination.route == RouteManager.Navigation) {
-        return fadeOut(tween(APP_LAUNCH_DURATION), targetAlpha = 0.98f)
+        return fadeOut(tween(APP_TRANSITION_DURATION - 60, easing = FastOutSlowInEasing))
     }
     return slideOutOfContainer(
         towards = AnimatedContentTransitionScope.SlideDirection.Start,
@@ -728,7 +722,7 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.activityExitTransi
 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.activityPopEnterTransition(): EnterTransition {
     if (targetState.destination.route == RouteManager.Navigation) {
-        return fadeIn(tween(APP_LAUNCH_DURATION), initialAlpha = 0.98f)
+        return fadeIn(tween(APP_TRANSITION_DURATION - 50, delayMillis = 50, easing = FastOutSlowInEasing))
     }
     return slideIntoContainer(
         towards = AnimatedContentTransitionScope.SlideDirection.End,
@@ -739,7 +733,7 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.activityPopEnterTr
 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.activityPopExitTransition(): ExitTransition {
     if (targetState.destination.route == RouteManager.Navigation) {
-        return fadeOut(tween(APP_LAUNCH_DURATION), targetAlpha = 0.98f)
+        return fadeOut(tween(APP_TRANSITION_DURATION - 80, easing = FastOutSlowInEasing))
     }
     return slideOutOfContainer(
         towards = AnimatedContentTransitionScope.SlideDirection.End,

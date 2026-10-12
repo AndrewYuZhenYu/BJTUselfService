@@ -1,14 +1,15 @@
 package team.bjtuss.bjtuselfservice.screen
 
 import androidx.compose.foundation.Image
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.foundation.background
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.aspectRatio
@@ -46,12 +47,12 @@ import sv.lib.squircleshape.SquircleShape
 import team.bjtuss.bjtuselfservice.R
 import team.bjtuss.bjtuselfservice.RouteManager
 import team.bjtuss.bjtuselfservice.component.elasticOverscroll
-import team.bjtuss.bjtuselfservice.component.appLaunchBounds
+import team.bjtuss.bjtuselfservice.component.appLaunchBackground
 import androidx.lifecycle.Lifecycle
 
 
 @Composable
-fun SpaceScreen(navController: NavController, enableLaunchMotion: Boolean = true) {
+fun SpaceScreen(navController: NavController, enableLaunchMotion: Boolean) {
 
     LazyVerticalGrid(
         modifier = Modifier.fillMaxSize().elasticOverscroll(),
@@ -71,7 +72,7 @@ fun SpaceScreen(navController: NavController, enableLaunchMotion: Boolean = true
                 title = space.title,
                 image = space.image,
                 icon = space.icon,
-                modifier = if (enableLaunchMotion) Modifier.appLaunchBounds(space.route) else Modifier,
+                launchRoute = if (enableLaunchMotion) space.route else null,
                 backgroundColor = MaterialTheme.colorScheme.primary
             ) {
                 if (navController.currentBackStackEntry?.lifecycle?.currentState == Lifecycle.State.RESUMED) {
@@ -87,6 +88,7 @@ fun SpaceCard(
     title: String,
     image: Int?,
     icon: ImageVector? = null,
+    launchRoute: String? = null,
     backgroundColor: Color,
     modifier: Modifier = Modifier,
     contentModifier: Modifier = Modifier,
@@ -101,10 +103,19 @@ fun SpaceCard(
     var touching by remember { mutableStateOf(false) }
     val held = touching || pressed || opening
     val pressScale = animateFloatAsState(
-        targetValue = if (held) 0.95f else 1f,
-        animationSpec = tween(if (held) 160 else 260, easing = FastOutSlowInEasing),
+        targetValue = if (held) 0.975f else 1f,
+        animationSpec = spring(dampingRatio = 0.9f, stiffness = 850f),
         label = "appCardPress"
     )
+    val cardFill = when {
+        isDark && hasBackground -> colors.surfaceContainerHigh.copy(alpha = 0.9f)
+        isDark -> colors.surfaceContainerHigh
+        hasBackground -> Color.Transparent
+        else -> colors.surfaceVariant.copy(alpha = 0.1f).compositeOver(backgroundColor)
+    }
+    val launchBackground = if (launchRoute != null) {
+        Modifier.appLaunchBackground(launchRoute, isDestination = false)
+    } else Modifier
 
     Card(
         onClick = onClick,
@@ -145,43 +156,38 @@ fun SpaceCard(
             else -> null
         },
         colors = CardDefaults.elevatedCardColors(
-            containerColor = when {
-                isDark && hasBackground -> colors.surfaceContainerHigh.copy(alpha = 0.9f)
-                isDark -> colors.surfaceContainerHigh
-                hasBackground -> Color.Transparent
-                else -> colors.surfaceVariant.copy(alpha = 0.1f).compositeOver(backgroundColor)
-            },
+            containerColor = Color.Transparent,
         )
     ) {
-        Column(
-            contentModifier
-                .aspectRatio(1.0f)
-                .padding(18.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge.copy(
-                    color = if (isDark) colors.onSurface else Color.White,
-                    fontWeight = FontWeight.SemiBold
+        Box(Modifier.aspectRatio(1.0f)) {
+            Box(Modifier.matchParentSize().then(launchBackground).background(cardFill))
+            Column(
+                contentModifier.fillMaxSize().padding(18.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        color = if (isDark) colors.onSurface else Color.White,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 )
-            )
-            if (icon != null) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = title,
-                    tint = if (isDark) colors.onSurfaceVariant else Color.White,
-                    modifier = Modifier.size(70.dp).align(Alignment.End)
-                )
-            } else if (image != null) {
-                Image(
-                    modifier = Modifier.size(70.dp).align(Alignment.End),
-                    painter = painterResource(id = image),
-                    contentDescription = title,
-                    contentScale = if (image == R.drawable.room_occupancy) ContentScale.Crop else ContentScale.Fit
-                )
+                if (icon != null) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = title,
+                        tint = if (isDark) colors.onSurfaceVariant else Color.White,
+                        modifier = Modifier.size(70.dp).align(Alignment.End)
+                    )
+                } else if (image != null) {
+                    Image(
+                        modifier = Modifier.size(70.dp).align(Alignment.End),
+                        painter = painterResource(id = image),
+                        contentDescription = title,
+                        contentScale = if (image == R.drawable.room_occupancy) ContentScale.Crop else ContentScale.Fit
+                    )
+                }
             }
-
         }
     }
 }
