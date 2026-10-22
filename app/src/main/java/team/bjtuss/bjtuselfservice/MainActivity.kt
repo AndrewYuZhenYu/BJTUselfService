@@ -16,17 +16,10 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -36,7 +29,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerDefaults
@@ -46,12 +39,10 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BorderAll
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -101,6 +92,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
 import team.bjtuss.bjtuselfservice.MainApplication.Companion.appContext
 import team.bjtuss.bjtuselfservice.component.elasticOverscroll
+import team.bjtuss.bjtuselfservice.component.LemniscateBloomLoader
 import team.bjtuss.bjtuselfservice.component.AppDestination
 import team.bjtuss.bjtuselfservice.component.LocalAppTransition
 import team.bjtuss.bjtuselfservice.component.LocalAppVisibility
@@ -415,67 +407,19 @@ fun App(
 fun FloatingLoggingIndicator(appState: AppState) {
     AnimatedVisibility(
         visible = appState == AppState.Logging,
-        enter = fadeIn(animationSpec = tween(300)) +
-                slideInVertically(
-                    animationSpec = tween(300),
-                    initialOffsetY = { it / 2 }
-                ),
-        exit = fadeOut(animationSpec = tween(300)) +
-                slideOutVertically(
-                    animationSpec = tween(300),
-                    targetOffsetY = { -it / 2 }
-                )
+        enter = fadeIn(animationSpec = tween(200)),
+        exit = fadeOut(animationSpec = tween(200))
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-        ) {
-            // 加载指示器背景卡片
-            Surface(
+        Box(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+            Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 64.dp) // 距离顶部的距离
-                    .wrapContentSize()
-                    .shadow(
-                        elevation = 4.dp,
-                        shape = RoundedCornerShape(24.dp)
-                    ),
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
+                    .padding(top = 4.dp)
+                    .size(56.dp)
+                    .graphicsLayer { alpha = 0.5f },
+                contentAlignment = Alignment.Center
             ) {
-                Row(
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    // 旋转动画的圆形进度指示器
-                    val infiniteTransition = rememberInfiniteTransition(label = "loading_indicator")
-                    val rotation by infiniteTransition.animateFloat(
-                        initialValue = 0f,
-                        targetValue = 360f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(1000, easing = LinearEasing),
-                            repeatMode = RepeatMode.Restart
-                        ),
-                        label = "rotation"
-                    )
-
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = "Loading",
-                        modifier = Modifier
-                            .size(18.dp)
-                            .graphicsLayer { rotationZ = rotation },
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-
-                    Text(
-                        "正在登录...",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
+                LemniscateBloomLoader(size = 44.dp)
             }
         }
     }

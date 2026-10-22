@@ -1,7 +1,7 @@
 # 交大自由行（BJTU Self Service）
 
 > 面向北京交通大学学生的 Android 校园服务客户端，将课表、成绩、考试、作业、课件、邮件、教室占用和校历等常用功能集中在一个应用中。
-
+<!-- # test -->
 [![Latest Release](https://img.shields.io/github/v/release/AndrewYuZhenYu/BJTUselfService?style=flat-square&label=最新版本)](https://github.com/AndrewYuZhenYu/BJTUselfService/releases/latest)
 [![Build Debug APK](https://github.com/AndrewYuZhenYu/BJTUselfService/actions/workflows/debug.yml/badge.svg)](https://github.com/AndrewYuZhenYu/BJTUselfService/actions/workflows/debug.yml)
 [![Android](https://img.shields.io/badge/Android-9.0%2B-brightgreen?style=flat-square&logo=android)](https://developer.android.com)

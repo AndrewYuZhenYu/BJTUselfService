@@ -72,9 +72,11 @@ import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavController
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
+import kotlinx.coroutines.delay
 import team.bjtuss.bjtuselfservice.R
 import team.bjtuss.bjtuselfservice.RouteManager
 import team.bjtuss.bjtuselfservice.component.CalendarComponent
+import team.bjtuss.bjtuselfservice.component.LemniscateBloomLoader
 import team.bjtuss.bjtuselfservice.entity.CourseEntity
 import team.bjtuss.bjtuselfservice.entity.ExamScheduleEntity
 import team.bjtuss.bjtuselfservice.entity.GradeEntity
@@ -97,8 +99,19 @@ import java.time.temporal.ChronoUnit
 @Composable
 fun HomeScreen(navController: NavController, mainViewModel: MainViewModel) {
     val appState by AppStateManager.appState.collectAsState()
+    var manualRefreshing by remember { mutableStateOf(false) }
     val refreshState =
-        rememberSwipeRefreshState(isRefreshing = appState == AppState.NetworkProgress)
+        rememberSwipeRefreshState(isRefreshing = manualRefreshing && appState == AppState.NetworkProgress)
+
+    LaunchedEffect(appState) {
+        if (appState != AppState.NetworkProgress) manualRefreshing = false
+    }
+    LaunchedEffect(manualRefreshing) {
+        if (manualRefreshing) {
+            delay(4000)
+            manualRefreshing = false
+        }
+    }
 
 
     val gradeChangeList: List<DataChange<GradeEntity>> by mainViewModel.gradeViewModel.changeList.collectAsState()
@@ -131,9 +144,27 @@ fun HomeScreen(navController: NavController, mainViewModel: MainViewModel) {
     val courseList by mainViewModel.courseScheduleViewModel.nextTermCourseList.collectAsState()
     val today = LocalDate.now()
     val weekday = today.dayOfWeek.value
-    val todayCourses = remember(courseList, currentWeek, weekday) {
+    val visibleCourses = remember(courseList, courseChangeList) {
+        val courses = linkedMapOf<Triple<String, String, Int>, CourseEntity>()
+        fun key(course: CourseEntity) = Triple(course.courseId, course.courseTime, course.courseLocationIndex)
+        courseList.flatten().forEach { courses[key(it)] = it }
+        courseChangeList.forEach { change ->
+            when (change) {
+                is DataChange.Added -> change.items.filterNot { it.isCurrentSemester }
+                    .forEach { courses[key(it)] = it }
+                is DataChange.Modified -> change.items.forEach { (updated, previous) ->
+                    if (!previous.isCurrentSemester) courses.remove(key(previous))
+                    if (!updated.isCurrentSemester) courses[key(updated)] = updated
+                }
+                is DataChange.Deleted -> change.items.filterNot { it.isCurrentSemester }
+                    .forEach { courses.remove(key(it)) }
+            }
+        }
+        courses.values.toList()
+    }
+    val todayCourses = remember(visibleCourses, currentWeek, weekday) {
         if (currentWeek <= 0) emptyList() else (0..6).flatMap { period ->
-            courseList.getOrNull(period * 8 + weekday).orEmpty()
+            visibleCourses.filter { it.courseLocationIndex == period * 8 + weekday }
                 .filter { currentWeek in parseCourseWeeks(it.courseTime) }
                 .map { period to it }
         }
@@ -154,6 +185,7 @@ fun HomeScreen(navController: NavController, mainViewModel: MainViewModel) {
 
     val handleRefresh = {
         if (appState != AppState.NetworkProgress) {
+            manualRefreshing = true
             AppEventManager.sendEvent(AppEvent.DataSyncRequest)
         }
     }
@@ -161,7 +193,28 @@ fun HomeScreen(navController: NavController, mainViewModel: MainViewModel) {
     val backgroundImageUri by mainViewModel.settingViewModel.backgroundImageUri.collectAsState()
     val hasBackground = backgroundImageUri.isNotEmpty()
 
-    SwipeRefresh(state = refreshState, onRefresh = handleRefresh, modifier = Modifier.fillMaxSize()) {
+    SwipeRefresh(
+        state = refreshState,
+        onRefresh = handleRefresh,
+        modifier = Modifier.fillMaxSize(),
+        indicator = { state, _ ->
+            if (state.isRefreshing || state.indicatorOffset > 0f) {
+                androidx.compose.material3.Surface(
+                    modifier = Modifier.size(56.dp).graphicsLayer {
+                        translationY = if (state.isRefreshing) size.height * 0.2f
+                        else state.indicatorOffset - size.height
+                    },
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surface,
+                    shadowElevation = 4.dp
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        LemniscateBloomLoader(size = 44.dp)
+                    }
+                }
+            }
+        }
+    ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize().elasticOverscroll(allowStart = false),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 112.dp),

@@ -4,11 +4,13 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,8 +28,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -39,6 +44,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import kotlinx.coroutines.delay
 import sv.lib.squircleshape.CornerSmoothing
 import sv.lib.squircleshape.SquircleShape
 import team.bjtuss.bjtuselfservice.R
@@ -97,11 +103,50 @@ fun SpaceCard(
     val isDark = colors.background.luminance() < 0.5f
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val held = pressed || opening
-    val pressScale = animateFloatAsState(
-        targetValue = if (held) 0.975f else 1f,
-        animationSpec = spring(dampingRatio = 1f, stiffness = 700f),
+    val hovered by interactionSource.collectIsHoveredAsState()
+    var pressExpanded by remember { mutableStateOf(false) }
+    LaunchedEffect(pressed) {
+        if (pressed) {
+            delay(180)
+            pressExpanded = true
+        } else {
+            pressExpanded = false
+        }
+    }
+    val lifted = (hovered || pressExpanded) && !opening
+    val cardScale = animateFloatAsState(
+        targetValue = when {
+            opening -> 0.95f
+            pressExpanded -> 1.06f
+            pressed -> 0.95f
+            hovered -> 1.04f
+            else -> 1f
+        },
+        animationSpec = tween(
+            durationMillis = if (pressed && !pressExpanded) 140 else 280,
+            easing = FastOutSlowInEasing
+        ),
         label = "appCardPress"
+    )
+    val iconLift by animateDpAsState(
+        targetValue = if (lifted) 6.dp else 0.dp,
+        animationSpec = tween(280, easing = FastOutSlowInEasing),
+        label = "appCardIconLift"
+    )
+    val titleLift by animateDpAsState(
+        targetValue = if (lifted) 4.dp else 0.dp,
+        animationSpec = tween(280, easing = FastOutSlowInEasing),
+        label = "appCardTitleLift"
+    )
+    val cardElevation by animateDpAsState(
+        targetValue = when {
+            hasBackground || isDark || opening -> 0.dp
+            lifted -> 12.dp
+            pressed -> 0.dp
+            else -> 8.dp
+        },
+        animationSpec = tween(280, easing = FastOutSlowInEasing),
+        label = "appCardElevation"
     )
     val cardFill = when {
         isDark && hasBackground -> colors.surfaceContainerHigh.copy(alpha = 0.9f)
@@ -128,15 +173,17 @@ fun SpaceCard(
         interactionSource = interactionSource,
         modifier = modifier.then(launchContainer)
             .graphicsLayer {
-                scaleX = pressScale.value
-                scaleY = pressScale.value
+                scaleX = cardScale.value
+                scaleY = cardScale.value
             },
         shape = SquircleShape(
             48.dp,
             CornerSmoothing.Medium
         ),
         elevation = CardDefaults.elevatedCardElevation(
-            if (hasBackground || isDark) 0.dp else 8.dp
+            defaultElevation = cardElevation,
+            pressedElevation = cardElevation,
+            hoveredElevation = cardElevation
         ),
         border = when {
             isDark -> androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant.copy(alpha = 0.55f))
@@ -155,6 +202,7 @@ fun SpaceCard(
             ) {
                 Text(
                     text = title,
+                    modifier = Modifier.graphicsLayer { translationY = -titleLift.toPx() },
                     style = MaterialTheme.typography.titleLarge.copy(
                         color = if (isDark) colors.onSurface else Color.White,
                         fontWeight = FontWeight.SemiBold
@@ -166,10 +214,12 @@ fun SpaceCard(
                         contentDescription = title,
                         tint = if (isDark) colors.onSurfaceVariant else Color.White,
                         modifier = Modifier.size(70.dp).align(Alignment.End)
+                            .graphicsLayer { translationY = -iconLift.toPx() }
                     )
                 } else if (image != null) {
                     Image(
-                        modifier = Modifier.size(70.dp).align(Alignment.End),
+                        modifier = Modifier.size(70.dp).align(Alignment.End)
+                            .graphicsLayer { translationY = -iconLift.toPx() },
                         painter = painterResource(id = image),
                         contentDescription = title,
                         contentScale = if (image == R.drawable.room_occupancy) ContentScale.Crop else ContentScale.Fit

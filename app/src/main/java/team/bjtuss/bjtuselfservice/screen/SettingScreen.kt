@@ -11,6 +11,7 @@ import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -22,18 +23,21 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.ColorLens
@@ -49,7 +53,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -68,6 +71,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -76,7 +80,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.LocalIndication
 import dev.jeziellago.compose.markdowntext.MarkdownText
 import kotlinx.coroutines.launch
@@ -992,10 +1000,71 @@ fun SwitchSettingItem(
                     }
                 }
             }
-            Switch(
+            AnimatedSettingSwitch(
                 checked = checked,
                 onCheckedChange = onCheckedChange
             )
+        }
+    }
+}
+
+@Composable
+private fun AnimatedSettingSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val trackColor by animateColorAsState(
+        targetValue = if (checked) colors.primary else colors.surfaceVariant,
+        animationSpec = tween(400),
+        label = "settingSwitchTrack"
+    )
+    val outlineColor by animateColorAsState(
+        targetValue = if (checked) colors.primary else colors.outline,
+        animationSpec = tween(400),
+        label = "settingSwitchOutline"
+    )
+    val thumbColor by animateColorAsState(
+        targetValue = if (checked) colors.onPrimary else colors.surface,
+        animationSpec = tween(250),
+        label = "settingSwitchThumb"
+    )
+    val thumbOffset by animateDpAsState(
+        targetValue = if (checked) 25.dp else 1.dp,
+        animationSpec = tween(250, easing = FastOutSlowInEasing),
+        label = "settingSwitchThumbOffset"
+    )
+    val checkAlpha by animateFloatAsState(
+        targetValue = if (checked) 1f else 0f,
+        animationSpec = tween(150, delayMillis = if (checked) 100 else 0),
+        label = "settingSwitchCheck"
+    )
+
+    Box(
+        modifier = Modifier
+            .size(width = 58.dp, height = 48.dp)
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = 58.dp, height = 34.dp)
+                .background(trackColor, CircleShape)
+                .border(1.dp, outlineColor, CircleShape)
+        ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .offset(x = thumbOffset)
+                    .size(32.dp)
+                    .background(thumbColor, CircleShape)
+                    .border(1.5.dp, outlineColor, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp).graphicsLayer { alpha = checkAlpha },
+                    tint = colors.primary
+                )
+            }
         }
     }
 }
