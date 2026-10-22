@@ -201,9 +201,17 @@ fun CourseScheduleScreen(
                         Column {
                             Text(text = "课程表")
                             Text(
-                                text = "${if (!currentTerm) "本周" else "总览"} · ${selectedWeekLabel(selectedWeek)}",
+                                text = if (currentTerm) {
+                                    "总览 · ${selectedWeekLabel(selectedWeek)}"
+                                } else {
+                                    "本周 · ${if (currentWeek > 0) selectedWeekLabel(currentWeek) else "周数待同步"}"
+                                },
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = if (!currentTerm && currentWeek > 0 && selectedWeek != currentWeek) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                }
                             )
                         }
                         if (!currentTerm) {
@@ -211,11 +219,7 @@ fun CourseScheduleScreen(
                                 text = "当前显示${selectedWeekLabel(selectedWeek)}",
                                 modifier = Modifier.padding(end = 16.dp),
                                 style = MaterialTheme.typography.labelMedium,
-                                color = if (currentWeek > 0 && selectedWeek != currentWeek) {
-                                    MaterialTheme.colorScheme.error
-                                } else {
-                                    MaterialTheme.colorScheme.onSurface
-                                },
+                                color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1
                             )
                         }

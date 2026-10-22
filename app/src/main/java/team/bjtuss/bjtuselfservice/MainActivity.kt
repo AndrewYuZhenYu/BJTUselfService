@@ -125,6 +125,7 @@ import team.bjtuss.bjtuselfservice.statemanager.AppState
 import team.bjtuss.bjtuselfservice.statemanager.AppStateManager
 import team.bjtuss.bjtuselfservice.statemanager.AuthenticatorManager
 import team.bjtuss.bjtuselfservice.statemanager.LoginDialog
+import team.bjtuss.bjtuselfservice.web.MisDataManager
 import team.bjtuss.bjtuselfservice.ui.theme.AppTheme
 import team.bjtuss.bjtuselfservice.viewmodel.ClassroomViewModel
 import team.bjtuss.bjtuselfservice.viewmodel.CourseScheduleViewModel
@@ -168,7 +169,7 @@ class MainActivity : ComponentActivity() {
             reminderNavigationRequest++
         }
         enableEdgeToEdge()
-        CaptchaModel.init(this)
+        if (!MisDataManager.USE_NEW_SSO && MisDataManager.AUTO_SOLVE_CAPTCHA) CaptchaModel.init(this)
 
 
         setContent {
@@ -385,7 +386,9 @@ fun App(
                     AppDestination(RouteManager.Grade, this) { GradeScreen(mainViewModel) }
                 }
                 composable(RouteManager.Email) {
-                    AppDestination(RouteManager.Email, this) { EmailScreen() }
+                    AppDestination(RouteManager.Email, this) {
+                        EmailScreen(onBack = { navController.popBackStack() })
+                    }
                 }
                 composable(RouteManager.HomeWork) {
                     AppDestination(RouteManager.HomeWork, this) { HomeworkScreen(mainViewModel) }

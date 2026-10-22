@@ -2,12 +2,13 @@ package team.bjtuss.bjtuselfservice.screen
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,8 +28,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -36,8 +35,6 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -47,8 +44,8 @@ import sv.lib.squircleshape.SquircleShape
 import team.bjtuss.bjtuselfservice.R
 import team.bjtuss.bjtuselfservice.RouteManager
 import team.bjtuss.bjtuselfservice.component.elasticOverscroll
-import team.bjtuss.bjtuselfservice.component.appLaunchBackground
-import androidx.lifecycle.Lifecycle
+import team.bjtuss.bjtuselfservice.component.LocalAppVisibility
+import team.bjtuss.bjtuselfservice.component.appLaunchContainer
 
 
 @Composable
@@ -75,7 +72,7 @@ fun SpaceScreen(navController: NavController, enableLaunchMotion: Boolean) {
                 launchRoute = if (enableLaunchMotion) space.route else null,
                 backgroundColor = MaterialTheme.colorScheme.primary
             ) {
-                if (navController.currentBackStackEntry?.lifecycle?.currentState == Lifecycle.State.RESUMED) {
+                if (navController.currentDestination?.route == RouteManager.Navigation) {
                     navController.navigate(space.route) { launchSingleTop = true }
                 }
             }
@@ -100,11 +97,10 @@ fun SpaceCard(
     val isDark = colors.background.luminance() < 0.5f
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    var touching by remember { mutableStateOf(false) }
-    val held = touching || pressed || opening
+    val held = pressed || opening
     val pressScale = animateFloatAsState(
         targetValue = if (held) 0.975f else 1f,
-        animationSpec = spring(dampingRatio = 0.9f, stiffness = 850f),
+        animationSpec = spring(dampingRatio = 1f, stiffness = 700f),
         label = "appCardPress"
     )
     val cardFill = when {
@@ -113,32 +109,24 @@ fun SpaceCard(
         hasBackground -> Color.Transparent
         else -> colors.surfaceVariant.copy(alpha = 0.1f).compositeOver(backgroundColor)
     }
-    val launchBackground = if (launchRoute != null) {
-        Modifier.appLaunchBackground(launchRoute, isDestination = false)
+    val visibility = LocalAppVisibility.current
+    val launchContainer = if (launchRoute != null) {
+        Modifier.appLaunchContainer(launchRoute, isDestination = false, visibility = visibility)
     } else Modifier
+    val contentAlpha = if (launchRoute != null && visibility != null) {
+        visibility.transition.animateFloat(
+            transitionSpec = {
+                if (targetState == EnterExitState.Visible) tween(180, delayMillis = 150)
+                else tween(100)
+            },
+            label = "appCardContentAlpha"
+        ) { state -> if (state == EnterExitState.Visible) 1f else 0f }.value
+    } else 1f
 
     Card(
         onClick = onClick,
         interactionSource = interactionSource,
-        modifier = modifier
-            .pointerInput(Unit) {
-                // Observe immediately without consuming events needed by the grid or Card.
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                    touching = true
-                    try {
-                        do {
-                            val event = awaitPointerEvent(PointerEventPass.Final)
-                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                            if (!change.pressed || change.isConsumed ||
-                                (change.position - down.position).getDistance() > viewConfiguration.touchSlop
-                            ) break
-                        } while (true)
-                    } finally {
-                        touching = false
-                    }
-                }
-            }
+        modifier = modifier.then(launchContainer)
             .graphicsLayer {
                 scaleX = pressScale.value
                 scaleY = pressScale.value
@@ -160,9 +148,9 @@ fun SpaceCard(
         )
     ) {
         Box(Modifier.aspectRatio(1.0f)) {
-            Box(Modifier.matchParentSize().then(launchBackground).background(cardFill))
+            Box(Modifier.matchParentSize().background(cardFill))
             Column(
-                contentModifier.fillMaxSize().padding(18.dp),
+                contentModifier.fillMaxSize().graphicsLayer { alpha = contentAlpha }.padding(18.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(

@@ -41,8 +41,18 @@ import team.bjtuss.bjtuselfservice.utils.Utils;
 
 public class MisDataManager {
     private static final long DATA_REQUEST_DELAY_MS = 500L;
+    public static final boolean USE_NEW_SSO = true;
+    public static final boolean AUTO_SOLVE_CAPTCHA = false;
 
-    public static void login(OkHttpClient client, String stuId, String stuPasswd, WebCallback loginCallback) {
+    public static void login(OkHttpClient client, String stuId, String stuPasswd, WebCallback<String> loginCallback) {
+        if (USE_NEW_SSO) {
+            MisSsoLogin.login(client, stuId, stuPasswd, loginCallback);
+            return;
+        }
+        legacyLogin(client, stuId, stuPasswd, loginCallback);
+    }
+
+    private static void legacyLogin(OkHttpClient client, String stuId, String stuPasswd, WebCallback<String> loginCallback) {
 
         Request request = new Request.Builder()
                 .url("https://mis.bjtu.edu.cn/auth/sso/?next=/")
@@ -86,9 +96,16 @@ public class MisDataManager {
 
                     @Override
                     public void onResponse(Call call, Response response) throws IOException {
+                        String loginUrl = response.request().url().toString();
                         Document doc = Jsoup.parse(response.body().string());
-                        String value = doc.select("input#id_captcha_0").attr("value");
                         String csrfmiddlewaretoken = doc.select("input[name=csrfmiddlewaretoken]").attr("value");
+                        if (!AUTO_SOLVE_CAPTCHA) {
+                            submitLogin(client, loginUrl, csrfmiddlewaretoken, stuId, stuPasswd,
+                                    null, null, loginCallback);
+                            response.close();
+                            return;
+                        }
+                        String value = doc.select("input#id_captcha_0").attr("value");
                         Request captchaRequest = new Request.Builder()
                                 .url("https://cas.bjtu.edu.cn/image/" + value + "/")
                                 .build();
@@ -115,70 +132,8 @@ public class MisDataManager {
                                     loginCallback.onFailure(0);
                                     return;
                                 }
-                                String nextUrl = url.substring("https://cas.bjtu.edu.cn/auth/login/?next=".length());
-                                FormBody formBody = new FormBody.Builder()
-                                        .add("csrfmiddlewaretoken", csrfmiddlewaretoken)
-                                        .add("captcha_0", value)
-                                        .add("captcha_1", ans)
-                                        .add("loginname", stuId)
-                                        .add("password", stuPasswd)
-                                        .build();
-                                Request loginRequest = new Request.Builder()
-                                        .url("https://cas.bjtu.edu.cn/auth/login/?next=" + nextUrl)
-                                        .header("Referer", url)
-                                        .header("Origin", "https://cas.bjtu.edu.cn")
-                                        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0")
-                                        .post(formBody)
-                                        .build();
-
-
-                                client.newCall(loginRequest).enqueue(new Callback() {
-                                    @Override
-                                    public void onFailure(Call call, IOException e) {
-                                        Log.e("LoginError", "Request failed", e);
-                                        Log.e("LoginError", "URL: " + call.request().url());
-                                        Log.e("LoginError", "Error type: " + e.getClass().getName());
-                                        Log.e("LoginError", "Error message: " + e.getMessage());
-
-                                        // 如果是 StreamResetException，打印更多信息
-                                        if (e instanceof okhttp3.internal.http2.StreamResetException) {
-                                            Log.e("LoginError", "HTTP/2 Stream Reset Error");
-                                        }
-
-                                        loginCallback.onFailure(0);
-                                    }
-
-                                    @Override
-                                    public void onResponse(Call call, Response response) throws IOException {
-                                        try {
-                                            // OkHttp 会自动跟随重定向到 mis.bjtu.edu.cn/home/
-                                            String finalUrl = response.request().url().toString();
-                                            String body = response.body().string();
-
-                                            Log.d("Login", "Final URL: " + finalUrl);
-                                            Log.d("Login", "Response code: " + response.code());
-
-                                            if (finalUrl.contains("mis.bjtu.edu.cn/home/")) {
-                                                Document doc = Jsoup.parse(body);
-                                                Element name = doc.selectFirst(".name_right > h3 > a");
-                                                if (name == null) {
-                                                    loginCallback.onFailure(1);
-                                                    return;
-                                                }
-                                                String nameStr = name.text().split("，")[0];
-                                                Element id = doc.selectFirst(".name_right .nr_con span:contains(身份)");
-                                                String idStr = id.text().replace("身份：", "");
-                                                Element department = doc.selectFirst(".name_right .nr_con span:contains(部门)");
-                                                String departmentStr = department.text().replace("部门：", "");
-                                                loginCallback.onResponse(nameStr + ";" + idStr + ";" + departmentStr);
-                                            } else {
-                                                loginCallback.onFailure(0);
-                                            }
-                                        } finally {
-                                            response.close();
-                                        }
-                                    }
-                                });
+                                submitLogin(client, loginUrl, csrfmiddlewaretoken, stuId, stuPasswd,
+                                        value, ans, loginCallback);
                                 response.close();
                             }
                         });
@@ -186,6 +141,74 @@ public class MisDataManager {
                     }
                 });
                 response.close();
+            }
+        });
+    }
+
+    private static void submitLogin(OkHttpClient client, String url, String csrfToken,
+                                    String stuId, String stuPasswd, String captchaValue,
+                                    String captchaAnswer, WebCallback loginCallback) {
+        HttpUrl loginUrl = HttpUrl.parse(url);
+        if (loginUrl == null || !"https".equals(loginUrl.scheme())
+                || !"cas.bjtu.edu.cn".equalsIgnoreCase(loginUrl.host())) {
+            loginCallback.onFailure(1);
+            return;
+        }
+        FormBody.Builder form = new FormBody.Builder()
+                .add("csrfmiddlewaretoken", csrfToken)
+                .add("loginname", stuId)
+                .add("password", stuPasswd);
+        if (captchaValue != null && captchaAnswer != null) {
+            form.add("captcha_0", captchaValue).add("captcha_1", captchaAnswer);
+        }
+        Request loginRequest = new Request.Builder()
+                .url(url)
+                .header("Referer", url)
+                .header("Origin", "https://cas.bjtu.edu.cn")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0")
+                .post(form.build())
+                .build();
+
+        client.newCall(loginRequest).enqueue(new Callback() {
+            @Override
+            public void onFailure(Call call, IOException e) {
+                Log.e("LoginError", "Request failed", e);
+                Log.e("LoginError", "URL: " + call.request().url());
+                Log.e("LoginError", "Error type: " + e.getClass().getName());
+                Log.e("LoginError", "Error message: " + e.getMessage());
+                if (e instanceof okhttp3.internal.http2.StreamResetException) {
+                    Log.e("LoginError", "HTTP/2 Stream Reset Error");
+                }
+                loginCallback.onFailure(0);
+            }
+
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                try {
+                    String finalUrl = response.request().url().toString();
+                    String body = response.body().string();
+                    Log.d("Login", "Final URL: " + finalUrl);
+                    Log.d("Login", "Response code: " + response.code());
+
+                    if (finalUrl.contains("mis.bjtu.edu.cn/home/")) {
+                        Document doc = Jsoup.parse(body);
+                        Element name = doc.selectFirst(".name_right > h3 > a");
+                        if (name == null) {
+                            loginCallback.onFailure(1);
+                            return;
+                        }
+                        String nameStr = name.text().split("，")[0];
+                        Element id = doc.selectFirst(".name_right .nr_con span:contains(身份)");
+                        String idStr = id.text().replace("身份：", "");
+                        Element department = doc.selectFirst(".name_right .nr_con span:contains(部门)");
+                        String departmentStr = department.text().replace("部门：", "");
+                        loginCallback.onResponse(nameStr + ";" + idStr + ";" + departmentStr);
+                    } else {
+                        loginCallback.onFailure(0);
+                    }
+                } finally {
+                    response.close();
+                }
             }
         });
     }
